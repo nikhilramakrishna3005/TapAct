@@ -10,6 +10,7 @@ import {
   PencilLine,
   Plus,
   Settings2,
+  UserRound,
   X,
 } from "lucide-react";
 import {
@@ -47,7 +48,9 @@ import {
   type TrackerUpdate,
   type WritableStorageLike,
 } from "@/lib/trackerStore";
+import { getInitials } from "@/lib/auth/account";
 import { ActivityCard } from "./components/ActivityCard";
+import { AuthProvider, useAuth } from "./components/AuthProvider";
 import { HistoryView } from "./components/HistoryView";
 import { InsightsView } from "./components/InsightsView";
 import { MotionPrefsProvider, useMotionPrefs } from "./components/MotionPrefs";
@@ -340,13 +343,16 @@ function formatTodayLabel(ms: number): string {
 export default function Page() {
   return (
     <MotionPrefsProvider>
-      <Home />
+      <AuthProvider>
+        <Home />
+      </AuthProvider>
     </MotionPrefsProvider>
   );
 }
 
 function Home() {
   const { expressive, setPreferences } = useMotionPrefs();
+  const auth = useAuth();
   const [tracker, setTracker] = useState<TrackerState>(() => createDefaultTrackerState(Date.now()));
   const trackerRef = useRef<TrackerState | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
@@ -418,6 +424,12 @@ function Home() {
     commit((base) => base);
     setHydrated(true);
     setOnboarding(firstLaunch ? "show" : "done");
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("tab") === "settings") {
+      setTab("settings");
+      url.searchParams.delete("tab");
+      window.history.replaceState(window.history.state, "", url);
+    }
   }, [commit]);
 
   useEffect(() => {
@@ -690,7 +702,30 @@ function Home() {
                     <OrbitMark size={26} spin={activeActivity !== null} />
                     <span className="text-[1.05rem] font-semibold tracking-[-0.03em]">TapAct</span>
                   </div>
-                  <p className="text-xs font-medium text-text-3">{formatTodayLabel(nowMs)}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-medium text-text-3">{formatTodayLabel(nowMs)}</p>
+                    {auth.status !== "unavailable" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTab("settings");
+                          window.scrollTo({ top: 0 });
+                        }}
+                        aria-label={auth.account ? "Account settings" : "Sign in or create an account"}
+                        className="-mr-1.5 grid size-11 place-items-center rounded-full"
+                      >
+                        {auth.account ? (
+                          <span className="grid size-8 place-items-center rounded-full bg-[linear-gradient(135deg,var(--volt),var(--ice))] text-[0.7rem] font-bold text-ink-0">
+                            {getInitials(auth.account)}
+                          </span>
+                        ) : (
+                          <span className="grid size-8 place-items-center rounded-full border border-line-strong text-text-2">
+                            <UserRound className="size-4" />
+                          </span>
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </header>
 
                 {persistFailure && (

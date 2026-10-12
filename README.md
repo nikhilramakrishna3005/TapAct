@@ -71,3 +71,33 @@ Known limitations:
 - First launch shows a splash and short onboarding (starter activities, optional goals, Skip). Completion is stored under `tapact.prefs.v1`; anyone with existing tracker data skips it automatically.
 - Settings → Motion controls animation intensity (Expressive/Subtle) and reduced motion (Match device/Always reduce). The OS `prefers-reduced-motion` setting is always respected.
 - UI preferences are stored separately, so the v3 tracker schema and backups are unchanged.
+
+## Phase 6A: Accounts (Supabase Auth)
+
+- `/auth` hosts Sign in, Create account, Forgot password, Set new password and the "check your inbox" states. Continue as guest is always available; nobody is forced to sign in.
+- Settings → Account shows guest vs. signed-in state (name, email, verification) and Sign out. Sessions restore automatically, so returning users never see login or onboarding again.
+- **Cloud sync is not implemented yet.** Signing in, signing out and creating an account never read, change, migrate or upload the local `tapact.tracker.v3` data, and the UI says so.
+- Without `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, the app builds and runs in guest-only mode. Network failures show a calm message and tracking keeps working.
+
+How it fits together:
+
+- `lib/supabase/client.ts` (browser) and `lib/supabase/server.ts` (route handlers) use `@supabase/ssr` with cookie sessions. `proxy.ts` refreshes the session on navigations and passes requests straight through when Supabase is unconfigured or unreachable.
+- `app/auth/confirm/route.ts` handles every email link: `token_hash` + `type` (recommended, works across browsers) and the default PKCE `code`. Destinations go through `safeNextPath` (`lib/auth/redirect.ts`), which only allows same-origin paths.
+- Only the public publishable key is used. No service-role or secret key is read anywhere.
+
+### Required Supabase configuration
+
+1. **Authentication → URL Configuration**
+   - Site URL: `https://tap-act.vercel.app`
+   - Redirect URLs: `https://tap-act.vercel.app/auth/confirm**` (add `http://localhost:3000/auth/confirm**` and your preview domain pattern, e.g. `https://*-<team>.vercel.app/auth/confirm**`, if you test there).
+2. **Authentication → Email Templates** (recommended, so links work even when opened in a different browser, such as Mail → Safari instead of the installed app):
+   - Confirm signup: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email`
+   - Reset password: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery`
+   
+   The default `{{ .ConfirmationURL }}` templates also work, but only in the browser that started the flow.
+3. Keep "Confirm email" enabled. Minimum password length in Supabase should be 8 or less (the app requires 8 characters with a letter and a number).
+
+### Required Vercel configuration
+
+- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` for Production (and Preview if you want accounts there). These are inlined at build time, so redeploy after changing them.
+- Optional: `NEXT_PUBLIC_SITE_URL=https://tap-act.vercel.app` to force email links to the production domain from any deployment.
