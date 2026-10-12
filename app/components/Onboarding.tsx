@@ -1,8 +1,8 @@
 "use client";
 
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, type AnimationSequence, motion, useAnimate } from "motion/react";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DURATION, EASE_OUT, TRANSITION_BASE } from "@/lib/motion";
 import { DEFAULT_STARTER_IDS, STARTER_PRESETS, type StarterActivity } from "@/lib/onboarding";
 import { useMotionPrefs } from "./MotionPrefs";
@@ -12,62 +12,101 @@ type Step = "welcome" | "how" | "activities" | "goals";
 const STEPS: Step[] = ["welcome", "how", "activities", "goals"];
 const GOAL_CHOICES = [null, 15, 30, 45, 60, 90, 120] as const;
 
-/** A glowing point that rises onto its orbit, which then draws itself around it. */
-function SplashOrbit({ reduced }: { reduced: boolean }) {
-  const settle = reduced ? { duration: 0 } : undefined;
+const RING_CIRCUMFERENCE = 2 * Math.PI * 70;
+const ENTRANCE_EASE = [0.22, 1, 0.36, 1] as const;
+const RING_EASE = [0.65, 0, 0.35, 1] as const;
+
+/**
+ * Welcome entrance (~2s, overlapping): a glowing core appears, its energy ripples
+ * outward into the violet-to-cyan orbit, the satellite lands on the ring, then the
+ * wordmark, tagline, and call to action rise in. Every element is rendered in its
+ * final state; `hidden` only applies the starting pose until the timeline runs.
+ */
+const ENTRANCE_SEQUENCE = [
+  ["[data-splash=core]", { opacity: [0, 1], scale: [0.2, 1] }, { duration: 0.5, ease: ENTRANCE_EASE, at: 0 }],
+  ["[data-splash=halo]", { opacity: [0, 0.5], scale: [0.25, 1] }, { duration: 1.1, ease: ENTRANCE_EASE, at: 0.1 }],
+  ["[data-splash=wave]", { opacity: [0, 0.5, 0], scale: [0.14, 1.04] }, { duration: 0.85, ease: ENTRANCE_EASE, at: 0.3 }],
+  ["[data-splash=ring-body]", { opacity: [0, 1], scale: [0.86, 1] }, { duration: 0.75, ease: ENTRANCE_EASE, at: 0.38 }],
+  ["[data-splash=ring]", { strokeDashoffset: [RING_CIRCUMFERENCE, 0] }, { duration: 0.8, ease: RING_EASE, at: 0.38 }],
+  ["[data-splash=satellite]", { opacity: [0, 1], scale: [0, 1] }, { duration: 0.4, ease: ENTRANCE_EASE, at: 1.0 }],
+  [
+    "[data-splash=wordmark]",
+    { opacity: [0, 1], y: [18, 0], letterSpacing: ["0.04em", "-0.035em"] },
+    { duration: 0.7, ease: ENTRANCE_EASE, at: 1.05 },
+  ],
+  ["[data-splash=tagline]", { opacity: [0, 1], y: [10, 0] }, { duration: 0.55, ease: ENTRANCE_EASE, at: 1.4 }],
+  ["[data-splash=cta]", { opacity: [0, 1], y: [10, 0] }, { duration: 0.5, ease: ENTRANCE_EASE, at: 1.55 }],
+] as const;
+
+const SVG_ORIGIN = { transformBox: "fill-box", transformOrigin: "center" } as const;
+
+function hiddenStyle(hidden: boolean): React.CSSProperties | undefined {
+  return hidden ? { opacity: 0 } : undefined;
+}
+
+function SplashOrbit({ hidden, orbiting }: { hidden: boolean; orbiting: boolean }) {
   return (
     <svg width="208" height="208" viewBox="0 0 208 208" aria-hidden="true" className="overflow-visible">
       <defs>
         <linearGradient id="splash-ring" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="var(--volt)" />
-          <stop offset="1" stopColor="var(--ice)" />
+          <stop offset="0" stopColor="#8E7BFF" />
+          <stop offset="1" stopColor="#5FE3FF" />
         </linearGradient>
         <radialGradient id="splash-glow">
-          <stop offset="0" stopColor="var(--volt)" stopOpacity="0.55" />
-          <stop offset="1" stopColor="var(--volt)" stopOpacity="0" />
+          <stop offset="0" stopColor="#8E7BFF" stopOpacity="0.5" />
+          <stop offset="0.6" stopColor="#8E7BFF" stopOpacity="0.12" />
+          <stop offset="1" stopColor="#8E7BFF" stopOpacity="0" />
         </radialGradient>
       </defs>
-      <motion.circle
+      <circle
+        data-splash="halo"
         cx="104"
         cy="104"
         r="100"
         fill="url(#splash-glow)"
-        initial={{ opacity: 0, scale: 0.4 }}
-        animate={{ opacity: 0.6, scale: 1 }}
-        transition={settle ?? { duration: 0.9, ease: EASE_OUT }}
-        style={{ transformOrigin: "104px 104px" }}
+        opacity={0.5}
+        style={{ ...SVG_ORIGIN, ...hiddenStyle(hidden) }}
       />
-      <motion.circle
+      <circle
+        data-splash="wave"
         cx="104"
         cy="104"
         r="70"
         fill="none"
-        stroke="url(#splash-ring)"
-        strokeWidth="3"
-        strokeLinecap="round"
-        transform="rotate(-90 104 104)"
-        initial={{ pathLength: 0, opacity: 0 }}
-        animate={{ pathLength: 1, opacity: 1 }}
-        transition={settle ?? { duration: 0.8, delay: 0.45, ease: [0.65, 0, 0.35, 1] }}
+        stroke="#B9ADFF"
+        strokeWidth="1.5"
+        style={{ ...SVG_ORIGIN, opacity: 0 }}
       />
-      <motion.circle
-        cx="104"
-        cy="104"
-        fill="var(--text-1)"
-        initial={{ r: 0 }}
-        animate={{ r: 9 }}
-        transition={settle ?? { duration: 0.35, ease: EASE_OUT }}
-      />
-      <g
-        className="ambient-spin"
-        style={{ animationDelay: "1.4s", transformBox: "view-box", transformOrigin: "104px 104px" }}
-      >
-        <motion.circle
+      <g data-splash="ring-body" style={{ ...SVG_ORIGIN, ...hiddenStyle(hidden) }}>
+        <circle
+          data-splash="ring"
           cx="104"
-          fill="var(--ice)"
-          initial={{ cy: 104, r: 0 }}
-          animate={{ cy: 34, r: 6 }}
-          transition={settle ?? { duration: 0.5, delay: 0.25, ease: EASE_OUT }}
+          cy="104"
+          r="70"
+          fill="none"
+          stroke="url(#splash-ring)"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeDasharray={RING_CIRCUMFERENCE}
+          transform="rotate(-90 104 104)"
+          style={{ strokeDashoffset: hidden ? RING_CIRCUMFERENCE : 0 }}
+        />
+      </g>
+      <circle cx="104" cy="104" r="22" fill="#8E7BFF" fillOpacity={0.18} data-splash="core" style={{ ...SVG_ORIGIN, ...hiddenStyle(hidden) }} />
+      <circle cx="104" cy="104" r="9" fill="var(--text-1)" data-splash="core" style={{ ...SVG_ORIGIN, ...hiddenStyle(hidden) }} />
+      <g
+        className={orbiting ? "ambient-spin" : undefined}
+        style={{ transformBox: "view-box", transformOrigin: "104px 104px" }}
+      >
+        <circle
+          data-splash="satellite"
+          cx="104"
+          cy="34"
+          r="6"
+          fill="#5FE3FF"
+          stroke="var(--ink-0)"
+          strokeWidth="2"
+          style={{ ...SVG_ORIGIN, ...hiddenStyle(hidden) }}
         />
       </g>
     </svg>
@@ -169,13 +208,51 @@ export function Onboarding({ onFinish }: { onFinish: (starters: StarterActivity[
   const { reduced } = useMotionPrefs();
   const [step, setStep] = useState<Step>("welcome");
   const [direction, setDirection] = useState(1);
+  const [entrancePlaying, setEntrancePlaying] = useState(() => !reduced);
+  const [scope, animate] = useAnimate<HTMLDivElement>();
+  const entranceRef = useRef<ReturnType<typeof animate> | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>(DEFAULT_STARTER_IDS);
   const [goals, setGoals] = useState<Record<string, number | null>>(() =>
     Object.fromEntries(STARTER_PRESETS.map((preset) => [preset.id, preset.goalMinutes])),
   );
 
+  useEffect(() => {
+    if (!entrancePlaying) {
+      return;
+    }
+    const controls = animate(ENTRANCE_SEQUENCE as unknown as AnimationSequence);
+    entranceRef.current = controls;
+    let active = true;
+    controls.then(() => {
+      if (active) {
+        setEntrancePlaying(false);
+      }
+    });
+    return () => {
+      active = false;
+      controls.stop();
+    };
+    // The entrance plays once on mount; later state changes only finish it early.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const finishEntrance = () => {
+    entranceRef.current?.complete();
+    setEntrancePlaying(false);
+  };
+
+  useEffect(() => {
+    if (reduced && entrancePlaying) {
+      finishEntrance();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduced]);
+
   const index = STEPS.indexOf(step);
   const go = (delta: number) => {
+    if (entrancePlaying) {
+      finishEntrance();
+    }
     setDirection(delta);
     setStep(STEPS[Math.min(Math.max(index + delta, 0), STEPS.length - 1)]);
   };
@@ -213,7 +290,9 @@ export function Onboarding({ onFinish }: { onFinish: (starters: StarterActivity[
             "radial-gradient(70% 45% at 50% 18%, rgba(142,123,255,0.18), transparent 70%), radial-gradient(60% 40% at 50% 110%, rgba(95,227,255,0.07), transparent 70%)",
         }}
       />
-      <div className="relative mx-auto flex min-h-full w-full max-w-[430px] flex-col px-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))]">
+      <div
+        ref={scope}
+        className="relative mx-auto flex min-h-full w-full max-w-[430px] flex-col px-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))]">
         <div className="flex h-12 items-center justify-between">
           <div className="flex gap-1.5" aria-hidden={step === "welcome"}>
             {step !== "welcome" &&
@@ -250,17 +329,17 @@ export function Onboarding({ onFinish }: { onFinish: (starters: StarterActivity[
           >
             {step === "welcome" && (
               <div className="flex flex-1 flex-col items-center justify-center text-center">
-                <SplashOrbit reduced={reduced} />
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={reduced ? { duration: 0 } : { duration: DURATION.slow, delay: 1.05, ease: EASE_OUT }}
+                <SplashOrbit hidden={entrancePlaying} orbiting={!entrancePlaying} />
+                <h1 data-splash="wordmark" className="display mt-6 text-[3rem]" style={hiddenStyle(entrancePlaying)}>
+                  TapAct
+                </h1>
+                <p
+                  data-splash="tagline"
+                  className="mx-auto mt-3 max-w-[280px] text-[0.95rem] leading-relaxed text-text-2"
+                  style={hiddenStyle(entrancePlaying)}
                 >
-                  <h1 className="display mt-6 text-[3rem]">TapAct</h1>
-                  <p className="mx-auto mt-3 max-w-[280px] text-[0.95rem] leading-relaxed text-text-2">
-                    Your day, in orbit. Track anything you do with a single tap.
-                  </p>
-                </motion.div>
+                  Your day, in orbit. Track anything you do with a single tap.
+                </p>
               </div>
             )}
 
@@ -369,7 +448,11 @@ export function Onboarding({ onFinish }: { onFinish: (starters: StarterActivity[
           </motion.div>
         </AnimatePresence>
 
-        <div className="mt-8 flex items-center gap-3">
+        <div
+          data-splash={step === "welcome" ? "cta" : undefined}
+          className="mt-8 flex items-center gap-3"
+          style={hiddenStyle(entrancePlaying && step === "welcome")}
+        >
           {index > 0 && (
             <button type="button" onClick={() => go(-1)} className="btn btn-ghost size-12 !px-0" aria-label="Back">
               <ArrowLeft className="size-4" />
