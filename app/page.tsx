@@ -1,68 +1,134 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
+import type { LucideIcon } from "lucide-react";
 import {
   BookOpen,
   BrainCircuit,
+  BriefcaseBusiness,
   CheckCircle2,
+  Code2,
   Dumbbell,
+  Globe2,
+  HeartPulse,
   House,
+  Languages,
   LineChart,
   MessageSquare,
+  Music2,
+  Palette,
+  PenLine,
+  Plus,
   Settings2,
+  Sparkles,
   Timer,
+  X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
-type ActivityId = "coding" | "gym" | "communication" | "reading";
+type ActivityIconName =
+  | "brain"
+  | "dumbbell"
+  | "message"
+  | "book"
+  | "briefcase"
+  | "code"
+  | "languages"
+  | "heart"
+  | "music"
+  | "globe"
+  | "pen"
+  | "palette";
+
+type Activity = {
+  id: string;
+  name: string;
+  iconKey: ActivityIconName;
+  color: string;
+  goalMinutes: number | null;
+  cue: string;
+};
 
 type TrackerState = {
   dayKey: string;
-  activeActivityId: ActivityId | null;
+  activeActivityId: string | null;
   activeSinceMs: number | null;
-  elapsedMs: Record<ActivityId, number>;
+  elapsedMs: Record<string, number>;
+  activities: Activity[];
 };
 
-const STORAGE_KEY = "tapact.tracker.v1";
+const STORAGE_KEY = "tapact.tracker.v2";
+const LEGACY_STORAGE_KEY = "tapact.tracker.v1";
 const MS_PER_MINUTE = 60_000;
+const DEFAULT_ACTIVITY_GOAL = 45;
+const TRACKED_TIME_CAP_MS = 8 * 60 * MS_PER_MINUTE;
 
-const ACTIVITY_CONFIG = [
+const ICON_REGISTRY: Record<ActivityIconName, { label: string; icon: LucideIcon }> = {
+  brain: { label: "Focus", icon: BrainCircuit },
+  dumbbell: { label: "Fitness", icon: Dumbbell },
+  message: { label: "Talk", icon: MessageSquare },
+  book: { label: "Reading", icon: BookOpen },
+  briefcase: { label: "Work", icon: BriefcaseBusiness },
+  code: { label: "Code", icon: Code2 },
+  languages: { label: "Language", icon: Languages },
+  heart: { label: "Health", icon: HeartPulse },
+  music: { label: "Music", icon: Music2 },
+  globe: { label: "Global", icon: Globe2 },
+  pen: { label: "Writing", icon: PenLine },
+  palette: { label: "Creative", icon: Palette },
+};
+
+const COLOR_OPTIONS = [
+  "#8B95FF",
+  "#4FD1A5",
+  "#E0A6FF",
+  "#7EC8F8",
+  "#FFB47D",
+  "#FFC86B",
+  "#9DE582",
+  "#B6BFCB",
+];
+
+const DEFAULT_ACTIVITIES: Activity[] = [
   {
     id: "coding",
-    label: "Coding",
-    description: "Deep work and software builds",
-    icon: BrainCircuit,
-    accent: "#8B95FF",
+    name: "Coding",
+    iconKey: "brain",
+    color: "#8B95FF",
     goalMinutes: 140,
+    cue: "Deep work sessions",
   },
   {
     id: "gym",
-    label: "Gym",
-    description: "Strength, cardio, and recovery",
-    icon: Dumbbell,
-    accent: "#4FD1A5",
+    name: "Gym",
+    iconKey: "dumbbell",
+    color: "#4FD1A5",
     goalMinutes: 50,
+    cue: "Strength and cardio",
   },
   {
     id: "communication",
-    label: "Communication",
-    description: "Speaking and conversation practice",
-    icon: MessageSquare,
-    accent: "#E0A6FF",
+    name: "Communication",
+    iconKey: "message",
+    color: "#E0A6FF",
     goalMinutes: 45,
+    cue: "Speaking practice",
   },
   {
     id: "reading",
-    label: "Reading",
-    description: "Books, papers, and focused study",
-    icon: BookOpen,
-    accent: "#7EC8F8",
+    name: "Reading",
+    iconKey: "book",
+    color: "#7EC8F8",
     goalMinutes: 60,
+    cue: "Focused reading time",
   },
-] as const;
-
-const ACTIVITY_IDS = ACTIVITY_CONFIG.map((activity) => activity.id);
-const DAILY_TARGET_MINUTES = 300;
+];
 
 function getTodayKey(date: Date): string {
   const year = date.getFullYear();
@@ -71,17 +137,77 @@ function getTodayKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function createElapsedSkeleton(activities: Activity[]): Record<string, number> {
+  const elapsed: Record<string, number> = {};
+  for (const activity of activities) {
+    elapsed[activity.id] = 0;
+  }
+  return elapsed;
+}
+
 function createDefaultState(dayKey: string): TrackerState {
   return {
     dayKey,
     activeActivityId: null,
     activeSinceMs: null,
-    elapsedMs: {
-      coding: 0,
-      gym: 0,
-      communication: 0,
-      reading: 0,
-    },
+    activities: DEFAULT_ACTIVITIES,
+    elapsedMs: createElapsedSkeleton(DEFAULT_ACTIVITIES),
+  };
+}
+
+function isColorHex(value: string): boolean {
+  return /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
+function normalizeActivity(activity: unknown, fallbackIndex: number): Activity | null {
+  if (!activity || typeof activity !== "object") {
+    return null;
+  }
+
+  const candidate = activity as Partial<Activity>;
+  const id =
+    typeof candidate.id === "string" && candidate.id.trim().length > 0
+      ? candidate.id.trim()
+      : `activity-${fallbackIndex + 1}`;
+  const name =
+    typeof candidate.name === "string" && candidate.name.trim().length > 0
+      ? candidate.name.trim().slice(0, 36)
+      : null;
+
+  if (!name) {
+    return null;
+  }
+
+  const iconKey =
+    typeof candidate.iconKey === "string" && candidate.iconKey in ICON_REGISTRY
+      ? (candidate.iconKey as ActivityIconName)
+      : "briefcase";
+
+  const color =
+    typeof candidate.color === "string" && isColorHex(candidate.color)
+      ? candidate.color
+      : "#B6BFCB";
+
+  const goalMinutes =
+    typeof candidate.goalMinutes === "number" &&
+    Number.isFinite(candidate.goalMinutes) &&
+    candidate.goalMinutes > 0 &&
+    candidate.goalMinutes <= 1440
+      ? Math.round(candidate.goalMinutes)
+      : null;
+
+  const cue =
+    typeof candidate.cue === "string" && candidate.cue.trim().length > 0
+      ? candidate.cue.trim().slice(0, 48)
+      : "Custom activity";
+
+  return {
+    id,
+    name,
+    iconKey,
+    color,
+    goalMinutes,
+    cue,
   };
 }
 
@@ -94,27 +220,41 @@ function normalizeStoredState(value: unknown, nowMs: number): TrackerState {
   }
 
   const candidate = value as Partial<TrackerState> & {
+    activities?: unknown;
     elapsedMs?: Record<string, unknown>;
   };
 
-  if (candidate.dayKey !== todayKey) {
-    return fallback;
+  const parsedActivities = Array.isArray(candidate.activities)
+    ? candidate.activities
+        .map((activity, index) => normalizeActivity(activity, index))
+        .filter((activity): activity is Activity => activity !== null)
+    : [];
+  const activities = parsedActivities.length > 0 ? parsedActivities : fallback.activities;
+  const uniqueIds = new Set<string>();
+  const dedupedActivities: Activity[] = [];
+  for (const activity of activities) {
+    if (uniqueIds.has(activity.id)) {
+      continue;
+    }
+    uniqueIds.add(activity.id);
+    dedupedActivities.push(activity);
   }
 
-  const elapsedMs = { ...fallback.elapsedMs };
-  for (const activityId of ACTIVITY_IDS) {
-    const rawValue = candidate.elapsedMs?.[activityId];
+  const elapsedMs = createElapsedSkeleton(dedupedActivities);
+  for (const activity of dedupedActivities) {
+    const rawValue = candidate.elapsedMs?.[activity.id];
     if (typeof rawValue === "number" && Number.isFinite(rawValue) && rawValue >= 0) {
-      elapsedMs[activityId] = rawValue;
+      elapsedMs[activity.id] = rawValue;
     }
   }
 
-  const activityIdIsValid =
+  const dayMatches = candidate.dayKey === todayKey;
+  const activeActivityId =
+    dayMatches &&
     typeof candidate.activeActivityId === "string" &&
-    ACTIVITY_IDS.includes(candidate.activeActivityId as ActivityId);
-  const activeActivityId = activityIdIsValid
-    ? (candidate.activeActivityId as ActivityId)
-    : null;
+    uniqueIds.has(candidate.activeActivityId)
+      ? candidate.activeActivityId
+      : null;
 
   let activeSinceMs: number | null = null;
   if (
@@ -123,13 +263,24 @@ function normalizeStoredState(value: unknown, nowMs: number): TrackerState {
     Number.isFinite(candidate.activeSinceMs) &&
     candidate.activeSinceMs > 0
   ) {
-    activeSinceMs = Math.min(candidate.activeSinceMs, nowMs);
+    activeSinceMs = Math.min(nowMs, candidate.activeSinceMs);
+  }
+
+  if (!dayMatches) {
+    return {
+      dayKey: todayKey,
+      activeActivityId: null,
+      activeSinceMs: null,
+      activities: dedupedActivities,
+      elapsedMs: createElapsedSkeleton(dedupedActivities),
+    };
   }
 
   return {
     dayKey: todayKey,
     activeActivityId,
     activeSinceMs,
+    activities: dedupedActivities,
     elapsedMs,
   };
 }
@@ -158,27 +309,37 @@ function formatSummaryDuration(ms: number): string {
   return `${hours}h ${minutes}m`;
 }
 
-function formatPercent(ratio: number): string {
-  return `${Math.round(Math.max(0, Math.min(1, ratio)) * 100)}%`;
+function formatCompactHours(ms: number): string {
+  const totalMinutes = Math.floor(ms / MS_PER_MINUTE);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0) {
+    return minutes === 0 ? `${hours}h` : `${hours}.${Math.floor(minutes / 6)}h`;
+  }
+  return `${Math.max(totalMinutes, 0)}m`;
 }
 
-function ProgressRing({
-  progress,
-  accent,
-  size = 176,
-  stroke = 12,
+function clampRatio(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function Ring({
+  size,
+  stroke,
+  ratio,
+  color,
   children,
 }: {
-  progress: number;
-  accent: string;
-  size?: number;
-  stroke?: number;
-  children?: React.ReactNode;
+  size: number;
+  stroke: number;
+  ratio: number;
+  color: string;
+  children: React.ReactNode;
 }) {
-  const normalized = Math.max(0, Math.min(1, progress));
+  const safeRatio = clampRatio(ratio);
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
-  const offset = circumference * (1 - normalized);
+  const offset = circumference * (1 - safeRatio);
 
   return (
     <div className="relative inline-grid place-items-center">
@@ -189,7 +350,7 @@ function ProgressRing({
           r={radius}
           strokeWidth={stroke}
           fill="none"
-          className="stroke-white/8"
+          className="stroke-white/10"
         />
         <motion.circle
           cx={size / 2}
@@ -197,17 +358,53 @@ function ProgressRing({
           r={radius}
           strokeWidth={stroke}
           fill="none"
-          stroke={accent}
+          stroke={color}
           strokeLinecap="round"
           strokeDasharray={circumference}
           animate={{ strokeDashoffset: offset }}
           initial={false}
-          transition={{ duration: 0.45, ease: "easeOut" }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
         />
       </svg>
       <div className="pointer-events-none absolute text-center">{children}</div>
     </div>
   );
+}
+
+function MetricRing({
+  label,
+  value,
+  caption,
+  ratio,
+  color,
+}: {
+  label: string;
+  value: string;
+  caption: string;
+  ratio: number;
+  color: string;
+}) {
+  return (
+    <article className="rounded-2xl border border-white/10 bg-white/[0.03] px-2 py-3 text-center">
+      <p className="text-[0.62rem] uppercase tracking-[0.18em] text-white/45">{label}</p>
+      <div className="mt-2 grid place-items-center">
+        <Ring size={90} stroke={7} ratio={ratio} color={color}>
+          <p className="text-sm font-semibold text-white">{value}</p>
+        </Ring>
+      </div>
+      <p className="mt-2 text-[0.67rem] text-white/50">{caption}</p>
+    </article>
+  );
+}
+
+function createActivityId(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 20);
+  const suffix = Math.random().toString(36).slice(2, 6);
+  return `${slug || "activity"}-${suffix}`;
 }
 
 export default function Home() {
@@ -216,6 +413,13 @@ export default function Home() {
   );
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [hydrated, setHydrated] = useState(false);
+
+  const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
+  const [draftName, setDraftName] = useState("");
+  const [draftIcon, setDraftIcon] = useState<ActivityIconName>("briefcase");
+  const [draftColor, setDraftColor] = useState("#8B95FF");
+  const [draftGoal, setDraftGoal] = useState("");
+  const [draftError, setDraftError] = useState<string | null>(null);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -227,9 +431,11 @@ export default function Home() {
   useEffect(() => {
     const now = Date.now();
     try {
-      const rawState = window.localStorage.getItem(STORAGE_KEY);
-      if (rawState) {
-        const parsed = JSON.parse(rawState) as unknown;
+      const nextRaw = window.localStorage.getItem(STORAGE_KEY);
+      const legacyRaw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+      const source = nextRaw ?? legacyRaw;
+      if (source) {
+        const parsed = JSON.parse(source) as unknown;
         setTracker(normalizeStoredState(parsed, now));
       } else {
         setTracker(createDefaultState(getTodayKey(new Date(now))));
@@ -250,47 +456,103 @@ export default function Home() {
   }, [hydrated, tracker]);
 
   useEffect(() => {
-    const currentDay = getTodayKey(new Date(nowMs));
-    setTracker((previous) =>
-      previous.dayKey === currentDay ? previous : createDefaultState(currentDay),
-    );
+    const today = getTodayKey(new Date(nowMs));
+    setTracker((previous) => {
+      if (previous.dayKey === today) {
+        return previous;
+      }
+      return {
+        ...previous,
+        dayKey: today,
+        activeActivityId: null,
+        activeSinceMs: null,
+        elapsedMs: createElapsedSkeleton(previous.activities),
+      };
+    });
   }, [nowMs]);
 
-  const elapsedByActivity = useMemo<Record<ActivityId, number>>(() => {
-    const elapsed = { ...tracker.elapsedMs };
+  useEffect(() => {
+    if (!isAddSheetOpen) {
+      return;
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isAddSheetOpen]);
+
+  const elapsedByActivity = useMemo(() => {
+    const elapsed: Record<string, number> = {};
+    for (const activity of tracker.activities) {
+      elapsed[activity.id] = Math.max(0, tracker.elapsedMs[activity.id] ?? 0);
+    }
     if (tracker.activeActivityId && tracker.activeSinceMs) {
-      const runningMs = Math.max(0, nowMs - tracker.activeSinceMs);
-      elapsed[tracker.activeActivityId] += runningMs;
+      const running = Math.max(0, nowMs - tracker.activeSinceMs);
+      elapsed[tracker.activeActivityId] = (elapsed[tracker.activeActivityId] ?? 0) + running;
     }
     return elapsed;
-  }, [nowMs, tracker.activeActivityId, tracker.activeSinceMs, tracker.elapsedMs]);
+  }, [nowMs, tracker.activities, tracker.activeActivityId, tracker.activeSinceMs, tracker.elapsedMs]);
 
   const totalTrackedMs = useMemo(() => {
-    return ACTIVITY_IDS.reduce((sum, activityId) => sum + elapsedByActivity[activityId], 0);
-  }, [elapsedByActivity]);
+    return tracker.activities.reduce(
+      (sum, activity) => sum + (elapsedByActivity[activity.id] ?? 0),
+      0,
+    );
+  }, [elapsedByActivity, tracker.activities]);
+
+  const activitiesWithGoals = useMemo(
+    () => tracker.activities.filter((activity) => activity.goalMinutes && activity.goalMinutes > 0),
+    [tracker.activities],
+  );
 
   const goalsCompleted = useMemo(() => {
-    return ACTIVITY_CONFIG.filter(
-      (activity) => elapsedByActivity[activity.id] >= activity.goalMinutes * MS_PER_MINUTE,
-    ).length;
-  }, [elapsedByActivity]);
+    return activitiesWithGoals.filter((activity) => {
+      const elapsed = elapsedByActivity[activity.id] ?? 0;
+      return elapsed >= (activity.goalMinutes ?? 0) * MS_PER_MINUTE;
+    }).length;
+  }, [activitiesWithGoals, elapsedByActivity]);
 
-  const activeLabel =
-    tracker.activeActivityId &&
-    ACTIVITY_CONFIG.find((activity) => activity.id === tracker.activeActivityId)?.label;
-  const dailyProgress = totalTrackedMs / (DAILY_TARGET_MINUTES * MS_PER_MINUTE);
+  const dailyTargetMinutes = useMemo(() => {
+    const totalGoalMinutes = activitiesWithGoals.reduce(
+      (sum, activity) => sum + (activity.goalMinutes ?? 0),
+      0,
+    );
+    return totalGoalMinutes > 0 ? totalGoalMinutes : 240;
+  }, [activitiesWithGoals]);
 
-  const handleActivityTap = useCallback((activityId: ActivityId) => {
+  const dailyProgressRatio = totalTrackedMs / (dailyTargetMinutes * MS_PER_MINUTE);
+  const goalsRatio =
+    activitiesWithGoals.length === 0 ? 0 : goalsCompleted / activitiesWithGoals.length;
+  const trackedTimeRatio = totalTrackedMs / TRACKED_TIME_CAP_MS;
+
+  const activeActivity =
+    tracker.activeActivityId === null
+      ? null
+      : tracker.activities.find((activity) => activity.id === tracker.activeActivityId) ?? null;
+  const activeElapsedMs = activeActivity ? elapsedByActivity[activeActivity.id] ?? 0 : 0;
+
+  const handleActivityTap = useCallback((activityId: string) => {
     const now = Date.now();
     setNowMs(now);
+
     setTracker((previous) => {
       const today = getTodayKey(new Date(now));
       const base =
-        previous.dayKey === today ? previous : createDefaultState(today);
-      const elapsedMs = { ...base.elapsedMs };
+        previous.dayKey === today
+          ? previous
+          : {
+              ...previous,
+              dayKey: today,
+              activeActivityId: null,
+              activeSinceMs: null,
+              elapsedMs: createElapsedSkeleton(previous.activities),
+            };
 
+      const elapsedMs = { ...base.elapsedMs };
       if (base.activeActivityId && base.activeSinceMs) {
-        elapsedMs[base.activeActivityId] += Math.max(0, now - base.activeSinceMs);
+        elapsedMs[base.activeActivityId] =
+          (elapsedMs[base.activeActivityId] ?? 0) + Math.max(0, now - base.activeSinceMs);
       }
 
       if (base.activeActivityId === activityId) {
@@ -304,187 +566,248 @@ export default function Home() {
 
       return {
         ...base,
-        elapsedMs,
+        elapsedMs: {
+          ...elapsedMs,
+          [activityId]: elapsedMs[activityId] ?? 0,
+        },
         activeActivityId: activityId,
         activeSinceMs: now,
       };
     });
   }, []);
 
+  const resetAddForm = useCallback(() => {
+    setDraftName("");
+    setDraftIcon("briefcase");
+    setDraftColor("#8B95FF");
+    setDraftGoal("");
+    setDraftError(null);
+  }, []);
+
+  const closeAddSheet = useCallback(() => {
+    setIsAddSheetOpen(false);
+    setDraftError(null);
+  }, []);
+
+  const handleAddActivity = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const name = draftName.trim();
+      if (name.length < 2) {
+        setDraftError("Activity name must be at least 2 characters.");
+        return;
+      }
+
+      let goalMinutes: number | null = null;
+      if (draftGoal.trim().length > 0) {
+        const parsedGoal = Number(draftGoal);
+        if (!Number.isFinite(parsedGoal) || parsedGoal <= 0 || parsedGoal > 1440) {
+          setDraftError("Daily goal must be between 1 and 1440 minutes.");
+          return;
+        }
+        goalMinutes = Math.round(parsedGoal);
+      }
+
+      setTracker((previous) => {
+        const id = createActivityId(name);
+        const activity: Activity = {
+          id,
+          name: name.slice(0, 36),
+          iconKey: draftIcon,
+          color: draftColor,
+          goalMinutes,
+          cue: "Custom activity",
+        };
+        return {
+          ...previous,
+          activities: [...previous.activities, activity],
+          elapsedMs: {
+            ...previous.elapsedMs,
+            [id]: 0,
+          },
+        };
+      });
+
+      closeAddSheet();
+      resetAddForm();
+    },
+    [closeAddSheet, draftColor, draftGoal, draftIcon, draftName, resetAddForm],
+  );
+
   return (
-    <div className="min-h-screen bg-[#090b0f] text-[#edf1f5]">
-      <main className="mx-auto flex w-full max-w-[390px] flex-col gap-4 px-4 pb-28 pt-4 sm:max-w-3xl sm:px-6 lg:max-w-5xl lg:gap-6 lg:px-10">
-        <section className="rounded-3xl border border-white/10 bg-[#11151b] px-5 py-5 shadow-[0_30px_70px_-45px_rgba(0,0,0,0.9)]">
-          <p className="text-[0.66rem] uppercase tracking-[0.25em] text-white/45">
-            TapAct
-          </p>
-          <div className="mt-2 flex items-center justify-between gap-3">
+    <div className="min-h-screen bg-[#090b10] text-[#edf2f7]">
+      <main className="mx-auto w-full max-w-[390px] px-4 pb-[122px] pt-3">
+        <header className="rounded-[28px] border border-white/10 bg-[#11161e] px-4 py-4 shadow-[0_18px_50px_-34px_rgba(0,0,0,1)]">
+          <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-[1.55rem] font-semibold tracking-tight text-white">
-                Everyday time, made intentional.
+              <p className="text-[0.63rem] uppercase tracking-[0.25em] text-white/50">TapAct</p>
+              <h1 className="mt-1 text-xl font-semibold tracking-tight text-white">
+                Make today intentional.
               </h1>
-              <p className="mt-1 text-sm text-white/55">
-                Tap once to run. Tap again to pause.
-              </p>
             </div>
-            <div className="shrink-0 rounded-full border border-white/12 bg-[#191f29] p-2 text-white/70">
-              <Timer className="size-5" />
+            <div className="rounded-full border border-white/12 bg-white/[0.03] p-2 text-white/70">
+              <Sparkles className="size-4" />
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2.5">
-            <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-              <p className="text-xs text-white/50">Daily Progress</p>
-              <p className="mt-1 text-lg font-semibold text-white">
-                {formatPercent(dailyProgress)}
+          <section className="mt-4 grid grid-cols-3 gap-2.5">
+            <MetricRing
+              label="Daily"
+              value={`${Math.round(clampRatio(dailyProgressRatio) * 100)}%`}
+              caption={`${formatSummaryDuration(totalTrackedMs)} / ${dailyTargetMinutes}m`}
+              ratio={dailyProgressRatio}
+              color="#99A8B8"
+            />
+            <MetricRing
+              label="Goals"
+              value={`${goalsCompleted}/${activitiesWithGoals.length || 0}`}
+              caption={`${Math.max(activitiesWithGoals.length - goalsCompleted, 0)} remaining`}
+              ratio={goalsRatio}
+              color="#84D7B4"
+            />
+            <MetricRing
+              label="Tracked"
+              value={formatCompactHours(totalTrackedMs)}
+              caption="of 8h focus cap"
+              ratio={trackedTimeRatio}
+              color="#9DA7FF"
+            />
+          </section>
+        </header>
+
+        <AnimatePresence initial={false}>
+          {activeActivity && (
+            <motion.section
+              key={activeActivity.id}
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22 }}
+              className="mt-3 rounded-2xl border border-white/10 bg-[#121822] px-4 py-3"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-white/75">
+                  Active: <span className="text-white">{activeActivity.name}</span>
+                </p>
+                <div className="rounded-full border border-white/15 bg-white/[0.04] px-2 py-1 text-[0.63rem] uppercase tracking-[0.18em] text-white/70">
+                  Running
+                </div>
+              </div>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-white">
+                {formatClock(activeElapsedMs)}
               </p>
-            </article>
-            <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-              <p className="text-xs text-white/50">Goals Completed</p>
-              <p className="mt-1 text-lg font-semibold text-white">
-                {goalsCompleted}/{ACTIVITY_CONFIG.length}
-              </p>
-            </article>
-            <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-              <p className="text-xs text-white/50">Tracked Today</p>
-              <p className="mt-1 text-lg font-semibold text-white">
-                {formatSummaryDuration(totalTrackedMs)}
-              </p>
-            </article>
+            </motion.section>
+          )}
+        </AnimatePresence>
+
+        <section className="mt-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[1.05rem] font-semibold tracking-tight text-white">
+              Today&apos;s Activities
+            </h2>
+            <button
+              type="button"
+              onClick={() => setIsAddSheetOpen(true)}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/15 bg-[#141b25] px-3 text-sm font-medium text-white transition-colors hover:border-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[#090b10]"
+            >
+              <Plus className="size-4" />
+              Add
+            </button>
           </div>
-        </section>
 
-        <section className="grid gap-4 lg:grid-cols-[1fr_1.25fr]">
-          <article className="rounded-3xl border border-white/10 bg-[#11151b] px-4 py-5 sm:px-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium text-white/70">Today Overview</h2>
-              <span className="text-xs text-white/45">{tracker.dayKey}</span>
-            </div>
-            <div className="mt-4 grid place-items-center">
-              <ProgressRing progress={dailyProgress} accent="#9BA5B4">
-                <p className="text-[0.63rem] uppercase tracking-[0.2em] text-white/45">
-                  Total
-                </p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-white">
-                  {formatClock(totalTrackedMs)}
-                </p>
-                <p className="mt-1 text-xs text-white/50">
-                  Target {DAILY_TARGET_MINUTES}m
-                </p>
-              </ProgressRing>
-            </div>
-            <AnimatePresence initial={false}>
-              <motion.div
-                key={activeLabel ?? "idle"}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.25 }}
-                className="mt-4 rounded-2xl border border-white/10 bg-white/[0.025] px-3 py-2 text-sm"
-              >
-                {activeLabel ? (
-                  <span className="text-white/75">
-                    Active now:{" "}
-                    <span className="font-medium text-white">{activeLabel}</span>
-                  </span>
-                ) : (
-                  <span className="text-white/55">No active activity</span>
-                )}
-              </motion.div>
-            </AnimatePresence>
-          </article>
-
-          <section
-            aria-label="Activity controls"
-            className="grid gap-3"
-          >
-            {ACTIVITY_CONFIG.map((activity) => {
+          <div className="mt-3 space-y-3">
+            {tracker.activities.map((activity) => {
+              const elapsedMs = elapsedByActivity[activity.id] ?? 0;
               const isActive = tracker.activeActivityId === activity.id;
-              const elapsedMs = elapsedByActivity[activity.id];
-              const goalMs = activity.goalMinutes * MS_PER_MINUTE;
-              const ratio = elapsedMs / goalMs;
-              const ActivityIcon = activity.icon;
+              const statusLabel = isActive ? "Running" : elapsedMs > 0 ? "Paused" : "Ready";
+              const ratio = activity.goalMinutes
+                ? elapsedMs / (activity.goalMinutes * MS_PER_MINUTE)
+                : elapsedMs / (DEFAULT_ACTIVITY_GOAL * MS_PER_MINUTE);
+              const progress = clampRatio(ratio);
+              const Icon = ICON_REGISTRY[activity.iconKey].icon;
 
               return (
                 <motion.button
                   key={activity.id}
                   type="button"
+                  whileTap={{ scale: 0.988 }}
                   onClick={() => handleActivityTap(activity.id)}
                   aria-pressed={isActive}
-                  whileTap={{ scale: 0.985 }}
-                  className="rounded-3xl border bg-[#11151b] px-4 py-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[#090b0f]"
+                  className="w-full rounded-[24px] border bg-[#11161e] px-4 py-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[#090b10]"
                   style={{
-                    borderColor: isActive ? activity.accent : "rgba(255,255,255,0.12)",
+                    borderColor: isActive ? activity.color : "rgba(255,255,255,0.11)",
                     boxShadow: isActive
-                      ? `0 16px 36px -26px ${activity.accent}`
-                      : "none",
+                      ? `0 18px 44px -34px ${activity.color}`
+                      : "0 14px 34px -34px rgba(0,0,0,0.9)",
                   }}
                 >
-                  <div className="flex items-center gap-4">
-                    <div
-                      className="rounded-2xl border border-white/10 p-2.5"
-                      style={{ color: activity.accent, background: "rgba(255,255,255,0.03)" }}
-                    >
-                      <ActivityIcon className="size-5" />
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className="truncate text-base font-semibold text-white">
-                          {activity.label}
-                        </h3>
-                        <AnimatePresence mode="wait" initial={false}>
-                          <motion.span
-                            key={isActive ? "running" : "paused"}
-                            initial={{ opacity: 0, y: 4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -4 }}
-                            transition={{ duration: 0.2 }}
-                            className="rounded-full border px-2 py-0.5 text-[0.67rem] uppercase tracking-[0.16em]"
-                            style={{
-                              color: isActive ? activity.accent : "rgba(255,255,255,0.66)",
-                              borderColor: isActive
-                                ? activity.accent
-                                : "rgba(255,255,255,0.15)",
-                              background: isActive
-                                ? "rgba(255,255,255,0.05)"
-                                : "rgba(255,255,255,0.02)",
-                            }}
-                          >
-                            {isActive ? "Running" : "Paused"}
-                          </motion.span>
-                        </AnimatePresence>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div
+                        className="rounded-2xl border border-white/10 p-3"
+                        style={{
+                          color: activity.color,
+                          background: "rgba(255,255,255,0.03)",
+                        }}
+                      >
+                        <Icon className="size-5" />
                       </div>
-                      <p className="mt-0.5 text-xs text-white/50">{activity.description}</p>
-                      <p className="mt-2 text-sm font-medium tabular-nums text-white/90">
-                        {formatClock(elapsedMs)}
-                      </p>
+                      <div className="min-w-0">
+                        <p className="truncate text-lg font-semibold tracking-tight text-white">
+                          {activity.name}
+                        </p>
+                        <p className="truncate text-xs text-white/55">{activity.cue}</p>
+                      </div>
                     </div>
+                    <div
+                      className="rounded-full border px-2.5 py-1 text-[0.63rem] uppercase tracking-[0.16em]"
+                      style={{
+                        color: isActive ? activity.color : "rgba(255,255,255,0.66)",
+                        borderColor: isActive ? activity.color : "rgba(255,255,255,0.16)",
+                        background: isActive ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.02)",
+                      }}
+                    >
+                      {statusLabel}
+                    </div>
+                  </div>
 
-                    <ProgressRing progress={ratio} accent={activity.accent} size={58} stroke={6}>
-                      <span className="text-[0.64rem] font-medium text-white/80">
-                        {formatPercent(ratio)}
-                      </span>
-                    </ProgressRing>
+                  <div className="mt-4 flex items-end justify-between gap-3">
+                    <p className="text-2xl font-semibold tabular-nums tracking-tight text-white">
+                      {formatClock(elapsedMs)}
+                    </p>
+                    <p className="text-xs text-white/55">
+                      {activity.goalMinutes ? `Goal ${activity.goalMinutes}m` : "No goal set"}
+                    </p>
+                  </div>
+
+                  <div className="mt-3">
+                    <div className="h-1.5 rounded-full bg-white/10">
+                      <motion.div
+                        className="h-full rounded-full"
+                        style={{ background: activity.color }}
+                        initial={false}
+                        animate={{ width: `${Math.max(progress * 100, 2)}%` }}
+                        transition={{ duration: 0.35, ease: "easeOut" }}
+                      />
+                    </div>
+                    <div className="mt-1.5 flex items-center justify-between text-[0.69rem] text-white/45">
+                      <span>{Math.round(progress * 100)}% complete</span>
+                      <span>{formatSummaryDuration(elapsedMs)}</span>
+                    </div>
                   </div>
                 </motion.button>
               );
             })}
-          </section>
+          </div>
         </section>
 
         {!hydrated && (
-          <p className="text-center text-xs text-white/45">
-            Syncing your latest local session…
-          </p>
+          <p className="mt-3 text-center text-xs text-white/45">Syncing your local session…</p>
         )}
       </main>
 
-      <nav
-        aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#0e1218]/95 backdrop-blur"
-      >
-        <div className="mx-auto grid w-full max-w-[390px] grid-cols-4 gap-2 px-3 py-2 sm:max-w-3xl lg:max-w-5xl">
+      <nav className="pointer-events-none fixed inset-x-0 bottom-4 z-20">
+        <div className="pointer-events-auto mx-auto grid w-[calc(100%-24px)] max-w-[360px] grid-cols-4 items-center gap-1 rounded-2xl border border-white/12 bg-[#0f141d]/95 px-2 py-2 shadow-[0_20px_40px_-28px_rgba(0,0,0,1)] backdrop-blur">
           {[
             { label: "Home", icon: House, active: true },
             { label: "Insights", icon: LineChart, active: false },
@@ -496,21 +819,21 @@ export default function Home() {
               <button
                 key={item.label}
                 type="button"
-                aria-current={item.active ? "page" : undefined}
-                className="group rounded-2xl border border-white/10 px-2 py-2 text-center transition-colors hover:border-white/20 disabled:cursor-not-allowed"
                 disabled={!item.active}
+                aria-current={item.active ? "page" : undefined}
+                className="rounded-xl px-1.5 py-1.5 text-center disabled:cursor-not-allowed"
               >
                 <NavIcon
                   className={`mx-auto size-4 ${
                     item.active ? "text-white" : "text-white/45"
                   }`}
                 />
-                <p className="mt-1 text-[0.68rem] font-medium tracking-wide text-white/90">
+                <p className="mt-1 text-[0.64rem] font-medium tracking-[0.03em] text-white/88">
                   {item.label}
                 </p>
                 {!item.active && (
-                  <p className="text-[0.58rem] uppercase tracking-[0.14em] text-white/45">
-                    Coming soon
+                  <p className="text-[0.54rem] uppercase tracking-[0.14em] text-white/45">
+                    Soon
                   </p>
                 )}
               </button>
@@ -518,6 +841,143 @@ export default function Home() {
           })}
         </div>
       </nav>
+
+      <AnimatePresence>
+        {isAddSheetOpen && (
+          <motion.div
+            className="fixed inset-0 z-30 bg-black/65"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={closeAddSheet}
+          >
+            <motion.section
+              role="dialog"
+              aria-modal="true"
+              aria-label="Add activity"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 280 }}
+              onClick={(event) => event.stopPropagation()}
+              className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[390px] rounded-t-[28px] border border-white/12 bg-[#121823] px-4 pb-5 pt-4 shadow-[0_-20px_44px_-30px_rgba(0,0,0,1)]"
+            >
+              <div className="mx-auto h-1.5 w-11 rounded-full bg-white/20" />
+              <div className="mt-3 flex items-center justify-between">
+                <h3 className="text-lg font-semibold tracking-tight text-white">Add Activity</h3>
+                <button
+                  type="button"
+                  onClick={closeAddSheet}
+                  className="rounded-full border border-white/15 p-1.5 text-white/70 hover:text-white"
+                  aria-label="Close add activity panel"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              <form className="mt-3 space-y-3" onSubmit={handleAddActivity}>
+                <label className="block">
+                  <span className="mb-1 block text-xs uppercase tracking-[0.15em] text-white/55">
+                    Activity Name
+                  </span>
+                  <input
+                    value={draftName}
+                    onChange={(event) => setDraftName(event.target.value)}
+                    placeholder="e.g. Meditation"
+                    className="w-full rounded-xl border border-white/12 bg-[#0f141d] px-3 py-2.5 text-sm text-white placeholder:text-white/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                  />
+                </label>
+
+                <div>
+                  <p className="mb-1 text-xs uppercase tracking-[0.15em] text-white/55">Icon</p>
+                  <div className="grid grid-cols-6 gap-2">
+                    {Object.entries(ICON_REGISTRY).map(([key, config]) => {
+                      const isSelected = draftIcon === key;
+                      const Icon = config.icon;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setDraftIcon(key as ActivityIconName)}
+                          className="rounded-xl border bg-[#0f141d] p-2 transition-colors"
+                          style={{
+                            borderColor: isSelected ? draftColor : "rgba(255,255,255,0.12)",
+                            color: isSelected ? draftColor : "rgba(255,255,255,0.74)",
+                          }}
+                          aria-label={`Select ${config.label} icon`}
+                        >
+                          <Icon className="mx-auto size-4" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-1 text-xs uppercase tracking-[0.15em] text-white/55">Color</p>
+                  <div className="grid grid-cols-8 gap-2">
+                    {COLOR_OPTIONS.map((color) => {
+                      const selected = color === draftColor;
+                      return (
+                        <button
+                          key={color}
+                          type="button"
+                          aria-label={`Select ${color} accent`}
+                          onClick={() => setDraftColor(color)}
+                          className="grid place-items-center rounded-full border p-[3px]"
+                          style={{
+                            borderColor: selected ? "white" : "rgba(255,255,255,0.14)",
+                          }}
+                        >
+                          <span
+                            className="block size-5 rounded-full"
+                            style={{ backgroundColor: color }}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs uppercase tracking-[0.15em] text-white/55">
+                    Daily Goal (minutes, optional)
+                  </span>
+                  <input
+                    value={draftGoal}
+                    onChange={(event) => setDraftGoal(event.target.value)}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="30"
+                    className="w-full rounded-xl border border-white/12 bg-[#0f141d] px-3 py-2.5 text-sm text-white placeholder:text-white/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                  />
+                </label>
+
+                {draftError && <p className="text-xs text-[#FFB4B4]">{draftError}</p>}
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeAddSheet();
+                      resetAddForm();
+                    }}
+                    className="flex-1 rounded-xl border border-white/15 bg-transparent px-3 py-2.5 text-sm font-medium text-white/85"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 rounded-xl border border-white/10 bg-[#1b2532] px-3 py-2.5 text-sm font-semibold text-white"
+                  >
+                    Save Activity
+                  </button>
+                </div>
+              </form>
+            </motion.section>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
