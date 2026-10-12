@@ -31,6 +31,7 @@ import type {
   TrackerUpdate,
   WritableStorageLike,
 } from "@/lib/trackerStore";
+import { AccountSection } from "./AccountSection";
 import { useMotionPrefs } from "./MotionPrefs";
 import { formatSummaryDuration, ScreenHeader, SectionCard, Segmented } from "./ui";
 
@@ -258,6 +259,8 @@ export function SettingsView({
         )}
       </AnimatePresence>
 
+      <AccountSection />
+
       <SectionCard title="Motion" aside={<Sparkles className="size-4 text-text-3" />}>
         <div className="space-y-4">
           <div>
@@ -380,7 +383,7 @@ export function SettingsView({
           <Row label="Total tracked" value={formatSummaryDuration(summary.totalMs)} />
         </dl>
         <p className="mt-3 text-[0.72rem] leading-relaxed text-text-3">
-          No account and no cloud sync. Your records never leave this browser unless you export them.
+          No cloud sync yet, even when signed in. Your records never leave this browser unless you export them.
           Clearing site data removes them, so keep a backup.
         </p>
       </SectionCard>
