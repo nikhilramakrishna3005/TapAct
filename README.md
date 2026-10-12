@@ -63,3 +63,11 @@ Known limitations:
 - If a tab's writes are failing while another tab saves successfully, the failing tab's unsaved changes can be superseded by the other tab's data.
 - If `tapact.tracker.v3` becomes unreadable, the app falls back to the older `v2`/`v1` data (if present) or defaults; the corrupt value is not backed up.
 - Day boundaries follow the device's current timezone. Changing timezones does not re-assign time that was already recorded.
+
+## Phase 5: Electric Minimalism
+
+- Design tokens (color, type, radius, spacing, motion) live in `app/globals.css` and `lib/motion.ts`.
+- The orbit motif (`app/components/Orbit.tsx`) powers the brand mark and the Home "Day Orbit", where each activity's time today is an arc against the daily target and goal satellites light up when met.
+- First launch shows a splash and short onboarding (starter activities, optional goals, Skip). Completion is stored under `tapact.prefs.v1`; anyone with existing tracker data skips it automatically.
+- Settings → Motion controls animation intensity (Expressive/Subtle) and reduced motion (Match device/Always reduce). The OS `prefers-reduced-motion` setting is always respected.
+- UI preferences are stored separately, so the v3 tracker schema and backups are unchanged.

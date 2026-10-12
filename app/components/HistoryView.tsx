@@ -18,6 +18,7 @@ import {
   formatSummaryDuration,
   ScreenHeader,
   SectionCard,
+  StatTile,
 } from "./ui";
 
 function describeDay(dayKey: string, todayKey: string): string {
@@ -68,19 +69,21 @@ export function HistoryView({ tracker, todayKey }: { tracker: TrackerState; toda
   return (
     <>
       <ScreenHeader eyebrow="History" title="Every day you showed up.">
-        <div className="mt-4 flex items-center justify-between gap-2">
+        <div className="mt-6 flex items-center justify-between gap-2">
           <button
             type="button"
             onClick={() => selectDay(shiftDayKey(safeSelectedKey, -1))}
             disabled={!canGoBack}
             aria-label="Previous day"
-            className="grid size-10 place-items-center rounded-full border border-white/12 bg-white/[0.03] text-white/80 transition-colors hover:border-white/30 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            className="grid size-11 place-items-center rounded-full border border-line-strong bg-ink-1 text-text-1 transition-colors hover:border-white/30 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
           >
             <ChevronLeft className="size-4" />
           </button>
           <div className="min-w-0 text-center">
-            <p className="text-sm font-semibold text-white">{describeDay(safeSelectedKey, todayKey)}</p>
-            <p className="text-xs text-white/50">
+            <p className="text-base font-semibold tracking-[-0.01em] text-text-1">
+              {describeDay(safeSelectedKey, todayKey)}
+            </p>
+            <p className="text-xs text-text-3">
               {selectedDate.toLocaleDateString(undefined, {
                 month: "long",
                 day: "numeric",
@@ -93,7 +96,7 @@ export function HistoryView({ tracker, todayKey }: { tracker: TrackerState; toda
             onClick={() => selectDay(shiftDayKey(safeSelectedKey, 1))}
             disabled={!canGoForward}
             aria-label="Next day"
-            className="grid size-10 place-items-center rounded-full border border-white/12 bg-white/[0.03] text-white/80 transition-colors hover:border-white/30 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            className="grid size-11 place-items-center rounded-full border border-line-strong bg-ink-1 text-text-1 transition-colors hover:border-white/30 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
           >
             <ChevronRight className="size-4" />
           </button>
@@ -103,7 +106,7 @@ export function HistoryView({ tracker, todayKey }: { tracker: TrackerState; toda
           ref={stripRef}
           role="listbox"
           aria-label="Recorded days"
-          className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]"
+          className="-mx-1 mt-4 flex gap-2 overflow-x-auto px-1 py-1 [scrollbar-width:none]"
         >
           {[...stripKeys].reverse().map((dayKey) => {
             const date = parseDayKey(dayKey);
@@ -117,18 +120,19 @@ export function HistoryView({ tracker, todayKey }: { tracker: TrackerState; toda
                 aria-selected={isSelected}
                 data-day={dayKey}
                 onClick={() => selectDay(dayKey)}
-                className="relative w-[3.25rem] shrink-0 rounded-2xl border px-1 py-2 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                className="relative min-h-[68px] w-[3.4rem] shrink-0 rounded-[18px] border px-1 py-2 text-center transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
                 style={{
-                  borderColor: isSelected ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.1)",
-                  background: isSelected ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.02)",
+                  borderColor: isSelected ? "var(--volt)" : "var(--line)",
+                  background: isSelected ? "rgba(142,123,255,0.16)" : "var(--ink-1)",
+                  boxShadow: isSelected ? "0 10px 28px -16px rgba(142,123,255,0.8)" : undefined,
                 }}
               >
-                <p className="text-[0.56rem] uppercase tracking-[0.12em] text-white/50">
+                <p className={`text-[0.58rem] font-semibold uppercase tracking-[0.12em] ${isSelected ? "text-volt-hi" : "text-text-3"}`}>
                   {date.toLocaleDateString(undefined, { weekday: "short" })}
                 </p>
-                <p className="mt-0.5 text-base font-semibold tabular-nums text-white">{date.getDate()}</p>
+                <p className="numeric mt-0.5 text-lg font-semibold text-text-1">{date.getDate()}</p>
                 <span
-                  className={`mx-auto mt-1 block size-1 rounded-full ${hasTime ? "bg-[#84D7B4]" : "bg-white/15"}`}
+                  className={`mx-auto mt-1 block size-1 rounded-full ${hasTime ? "bg-ice" : "bg-white/15"}`}
                 />
               </button>
             );
@@ -145,24 +149,19 @@ export function HistoryView({ tracker, todayKey }: { tracker: TrackerState; toda
           exit={{ opacity: 0, x: direction * -18 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
         >
-          <section className="mt-3 grid grid-cols-2 gap-2.5">
-            <article className="rounded-[20px] border border-white/10 bg-[#11161e] px-4 py-3">
-              <p className="text-[0.6rem] uppercase tracking-[0.18em] text-white/45">Total tracked</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-white">
-                {formatSummaryDuration(dayTotal)}
-              </p>
-            </article>
-            <article className="rounded-[20px] border border-white/10 bg-[#11161e] px-4 py-3">
-              <p className="text-[0.6rem] uppercase tracking-[0.18em] text-white/45">Goals met</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-white">
-                {goals.total > 0 ? `${goals.met}/${goals.total}` : "—"}
-              </p>
-            </article>
+          <section className="mt-5 grid grid-cols-2 gap-2">
+            <StatTile label="Total tracked" value={formatSummaryDuration(dayTotal)} accent="#5FE3FF" emphasis />
+            <StatTile
+              label="Goals met"
+              value={goals.total > 0 ? `${goals.met}/${goals.total}` : "—"}
+              accent="#6CF2C2"
+              emphasis
+            />
           </section>
 
           <SectionCard
             title="Breakdown"
-            aside={<p className="text-xs text-white/50">{breakdown.length} activities</p>}
+            aside={<p className="text-xs text-text-3">{breakdown.length} activities</p>}
           >
             {breakdown.length === 0 ? (
               recordedKeys.length === 0 ? (
@@ -179,7 +178,7 @@ export function HistoryView({ tracker, todayKey }: { tracker: TrackerState; toda
                 />
               )
             ) : (
-              <ul className="space-y-2">
+              <ul>
                 {breakdown.map((entry, index) => {
                   const goalMinutes =
                     entry.activity.archivedAtMs === null ? entry.activity.goalMinutes : null;
@@ -190,13 +189,13 @@ export function HistoryView({ tracker, todayKey }: { tracker: TrackerState; toda
                       index={index}
                       {...entry}
                       trailing={
-                        <p className="flex items-center gap-1 text-xs text-white/50">
+                        <p className="flex items-center gap-1 text-xs text-text-3">
                           {Math.round(entry.share * 100)}% of day
                           {goalMinutes !== null && (
                             <>
                               {" · "}
                               {goalMet ? (
-                                <span className="inline-flex items-center gap-0.5 text-[#84D7B4]">
+                                <span className="inline-flex items-center gap-0.5 font-medium text-mint">
                                   <CheckCircle2 className="size-3" />
                                   Goal met
                                 </span>

@@ -19,13 +19,18 @@ export const metadata: Metadata = {
     "TapAct helps you track everyday activities with one-tap start, pause, and automatic switching.",
 };
 
+export const viewport: Viewport = {
+  themeColor: "#07070b",
+  colorScheme: "dark",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-motion="expressive" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

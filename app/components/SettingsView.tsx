@@ -9,6 +9,7 @@ import {
   Info,
   MoreVertical,
   Share,
+  Sparkles,
   Smartphone,
   SquarePlus,
   Upload,
@@ -30,7 +31,8 @@ import type {
   TrackerUpdate,
   WritableStorageLike,
 } from "@/lib/trackerStore";
-import { formatSummaryDuration, ScreenHeader, SectionCard } from "./ui";
+import { useMotionPrefs } from "./MotionPrefs";
+import { formatSummaryDuration, ScreenHeader, SectionCard, Segmented } from "./ui";
 
 type Feedback = { tone: "success" | "error"; message: string };
 
@@ -78,8 +80,7 @@ function formatDateTime(ms: number): string {
   });
 }
 
-const BUTTON_CLASS =
-  "inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-white/12 bg-[#1b2532] px-3 text-sm font-semibold text-white transition-colors hover:border-white/30 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60";
+const BUTTON_CLASS = "btn btn-ghost h-12 flex-1";
 
 export function SettingsView({
   tracker,
@@ -101,6 +102,8 @@ export function SettingsView({
   const [storageAvailable, setStorageAvailable] = useState(true);
   const [storedBytes, setStoredBytes] = useState(0);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const { prefs, systemReduced, reduced, setPreferences } = useMotionPrefs();
+  const [motionSaveFailed, setMotionSaveFailed] = useState(false);
 
   useEffect(() => {
     setPlatform(detectPlatform());
@@ -239,10 +242,10 @@ export function SettingsView({
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
-            className={`mt-3 flex items-start gap-2 rounded-2xl border px-3 py-2.5 text-xs leading-relaxed ${
+            className={`mt-4 flex items-start gap-2 rounded-2xl border px-3 py-2.5 text-xs leading-relaxed ${
               feedback.tone === "success"
-                ? "border-[#84D7B4]/30 bg-[#84D7B4]/[0.07] text-[#C7F0DC]"
-                : "border-[#FF8A8A]/30 bg-[#FF8A8A]/[0.07] text-[#FFD0D0]"
+                ? "border-mint/30 bg-mint/[0.07] text-[#C9FBE7]"
+                : "border-danger/30 bg-danger/[0.07] text-[#FFD0D0]"
             }`}
           >
             {feedback.tone === "success" ? (
@@ -255,15 +258,66 @@ export function SettingsView({
         )}
       </AnimatePresence>
 
-      <SectionCard title="Install TapAct" aside={<Smartphone className="size-4 text-white/45" />}>
+      <SectionCard title="Motion" aside={<Sparkles className="size-4 text-text-3" />}>
+        <div className="space-y-4">
+          <div>
+            <p className="mb-2 text-xs text-text-2">Animation intensity</p>
+            <Segmented
+              label="Animation intensity"
+              layoutId="settings-intensity"
+              size="md"
+              value={prefs.motionIntensity}
+              onChange={(motionIntensity) => setMotionSaveFailed(!setPreferences({ motionIntensity }))}
+              options={[
+                { value: "expressive", label: "Expressive" },
+                { value: "subtle", label: "Subtle" },
+              ]}
+            />
+            <p className="mt-2 text-[0.72rem] leading-relaxed text-text-3">
+              {prefs.motionIntensity === "expressive"
+                ? "Live pulses on running timers, an orbiting logo, and goal celebrations."
+                : "Quick transitions only. No looping effects or celebration bursts."}
+            </p>
+          </div>
+          <div>
+            <p className="mb-2 text-xs text-text-2">Reduced motion</p>
+            <Segmented
+              label="Reduced motion"
+              layoutId="settings-reduced"
+              size="md"
+              value={prefs.reducedMotion}
+              onChange={(reducedMotion) => setMotionSaveFailed(!setPreferences({ reducedMotion }))}
+              options={[
+                { value: "system", label: "Match device" },
+                { value: "reduce", label: "Always reduce" },
+              ]}
+            />
+            <p className="mt-2 text-[0.72rem] leading-relaxed text-text-3">
+              {prefs.reducedMotion === "reduce"
+                ? "Movement is minimized everywhere, regardless of device settings."
+                : systemReduced
+                  ? "Your device asks for reduced motion, so movement is minimized."
+                  : "Follows your device's reduced-motion setting (currently off)."}
+              {reduced && prefs.motionIntensity === "expressive" && " Intensity applies when motion isn't reduced."}
+            </p>
+          </div>
+          {motionSaveFailed && (
+            <p role="status" className="text-[0.72rem] text-ember">
+              Applied for this session, but browser storage couldn't save it.
+            </p>
+          )}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Install TapAct" aside={<Smartphone className="size-4 text-text-3" />}>
         {installed ? (
-          <p className="flex items-center gap-2 text-sm text-white/75">
-            <CheckCircle2 className="size-4 text-[#84D7B4]" />
+          <p className="flex items-center gap-2 text-sm text-text-2">
+            <CheckCircle2 className="size-4 text-mint" />
             Running as an installed app.
           </p>
         ) : (
           <div className="space-y-3">
-            <p className="text-xs leading-relaxed text-white/55">
+            <p className="text-xs leading-relaxed text-text-2">
               Add TapAct to your home screen for a full-screen app that opens instantly, even offline.
             </p>
             {installPrompt && (
@@ -306,13 +360,13 @@ export function SettingsView({
         )}
       </SectionCard>
 
-      <SectionCard title="Storage" aside={<HardDrive className="size-4 text-white/45" />}>
+      <SectionCard title="Storage" aside={<HardDrive className="size-4 text-text-3" />}>
         <dl className="space-y-2">
           <Row label="Storage mode" value="On this device (local storage)" />
           <Row
             label="Status"
             value={
-              <span className={storageStatus === "Healthy" ? "text-[#84D7B4]" : "text-[#FFB47D]"}>
+              <span className={storageStatus === "Healthy" ? "text-mint" : "text-ember"}>
                 {storageStatus}
               </span>
             }
@@ -325,7 +379,7 @@ export function SettingsView({
           <Row label="Recorded days" value={String(summary.dayCount)} />
           <Row label="Total tracked" value={formatSummaryDuration(summary.totalMs)} />
         </dl>
-        <p className="mt-3 text-[0.7rem] leading-relaxed text-white/45">
+        <p className="mt-3 text-[0.72rem] leading-relaxed text-text-3">
           No account and no cloud sync. Your records never leave this browser unless you export them.
           Clearing site data removes them, so keep a backup.
         </p>
@@ -353,7 +407,7 @@ export function SettingsView({
             onChange={handleFileSelected}
           />
         </div>
-        <p className="mt-2 text-[0.7rem] leading-relaxed text-white/45">
+        <p className="mt-2 text-[0.72rem] leading-relaxed text-text-3">
           Backups are JSON files with every activity (including archived ones) and your full history.
         </p>
 
@@ -367,12 +421,12 @@ export function SettingsView({
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <div className="mt-3 rounded-2xl border border-[#FFB47D]/30 bg-[#FFB47D]/[0.05] px-3 py-3">
-                <p className="flex items-center gap-1.5 text-sm font-semibold text-white">
-                  <AlertTriangle className="size-4 text-[#FFB47D]" />
+              <div className="mt-3 rounded-[var(--radius-md)] border border-ember/30 bg-ember/[0.05] px-3 py-3">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-text-1">
+                  <AlertTriangle className="size-4 text-ember" />
                   Replace all local data?
                 </p>
-                <p className="mt-1 truncate text-xs text-white/55">{pendingImport.fileName}</p>
+                <p className="mt-1 truncate text-xs text-text-3">{pendingImport.fileName}</p>
                 <dl className="mt-2 space-y-1.5">
                   {pendingImport.summary.exportedAtMs !== null && (
                     <Row label="Exported" value={formatDateTime(pendingImport.summary.exportedAtMs)} />
@@ -387,7 +441,7 @@ export function SettingsView({
                     value={formatSummaryDuration(pendingImport.summary.totalMs)}
                   />
                 </dl>
-                <p className="mt-2 text-[0.7rem] leading-relaxed text-white/55">
+                <p className="mt-2 text-[0.72rem] leading-relaxed text-text-2">
                   Your current {summary.activityCount} activities and {summary.dayCount} recorded days
                   will be replaced, and any running timer will stop. This can&apos;t be undone, so
                   export first if you want to keep them.
@@ -396,14 +450,14 @@ export function SettingsView({
                   <button
                     type="button"
                     onClick={() => setPendingImport(null)}
-                    className="h-10 flex-1 rounded-xl border border-white/15 text-sm font-medium text-white/85"
+                    className="btn btn-ghost h-11 flex-1"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
                     onClick={confirmImport}
-                    className="h-10 flex-1 rounded-xl border border-[#FFB47D]/40 bg-[#FFB47D]/[0.12] text-sm font-semibold text-[#FFE1C8]"
+                    className="btn h-11 flex-1 border border-ember/40 bg-ember/[0.14] text-[#FFE1C8]"
                   >
                     Replace data
                   </button>
@@ -414,7 +468,7 @@ export function SettingsView({
         </AnimatePresence>
       </SectionCard>
 
-      <SectionCard title="About" aside={<Info className="size-4 text-white/45" />}>
+      <SectionCard title="About" aside={<Info className="size-4 text-text-3" />}>
         <dl className="space-y-2">
           <Row label="App" value={`TapAct ${packageJson.version}`} />
           <Row label="Data format" value={`Tracker schema v${tracker.schemaVersion}`} />
@@ -422,7 +476,7 @@ export function SettingsView({
             label="Offline"
             value={
               <span className="inline-flex items-center gap-1">
-                <WifiOff className="size-3.5 text-white/45" />
+                <WifiOff className="size-3.5 text-text-3" />
                 {offlineReady ? "Ready" : "Available after first load"}
               </span>
             }
@@ -435,21 +489,21 @@ export function SettingsView({
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] pb-1.5 last:border-0 last:pb-0">
-      <dt className="shrink-0 text-xs text-white/50">{label}</dt>
-      <dd className="truncate text-right text-sm font-medium tabular-nums text-white">{value}</dd>
+    <div className="flex min-h-9 items-center justify-between gap-3 border-b border-line pb-1.5 last:border-0 last:pb-0">
+      <dt className="shrink-0 text-xs text-text-3">{label}</dt>
+      <dd className="truncate text-right text-sm font-medium tabular-nums text-text-1">{value}</dd>
     </div>
   );
 }
 
 function InstallSteps({ title, steps }: { title: string; steps: React.ReactNode[] }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0f141d] px-3 py-3">
-      <p className="text-[0.62rem] uppercase tracking-[0.16em] text-white/50">{title}</p>
+    <div className="rounded-[var(--radius-md)] border border-line bg-ink-0 px-3 py-3">
+      <p className="eyebrow !text-[0.6rem] !tracking-[0.16em]">{title}</p>
       <ol className="mt-2 space-y-1.5">
         {steps.map((step, index) => (
-          <li key={index} className="flex gap-2 text-xs leading-relaxed text-white/75">
-            <span className="grid size-4 shrink-0 place-items-center rounded-full bg-white/10 text-[0.6rem] font-semibold text-white">
+          <li key={index} className="flex gap-2 text-xs leading-relaxed text-text-2">
+            <span className="grid size-4 shrink-0 place-items-center rounded-full bg-volt/25 text-[0.6rem] font-semibold text-text-1">
               {index + 1}
             </span>
             <span>{step}</span>
