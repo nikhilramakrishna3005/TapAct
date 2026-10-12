@@ -12,6 +12,7 @@ import {
   getWeekStartKey,
   sumRange,
 } from "@/lib/insights";
+import { DURATION, EASE_OUT } from "@/lib/motion";
 import type { TrackerState } from "@/lib/tracker";
 import {
   ActivityBreakdownRow,
@@ -21,6 +22,7 @@ import {
   Ring,
   ScreenHeader,
   SectionCard,
+  Segmented,
 } from "./ui";
 
 type Period = "today" | "week" | "month";
@@ -31,7 +33,7 @@ const PERIOD_LABELS: Record<Period, string> = {
   month: "Month",
 };
 
-const CHART_HEIGHT = 132;
+const CHART_HEIGHT = 148;
 
 export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; todayKey: string }) {
   const [period, setPeriod] = useState<Period>("week");
@@ -76,27 +78,34 @@ export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; tod
   return (
     <>
       <ScreenHeader eyebrow="Insights" title="See where your time goes.">
-        <div className="mt-4 grid grid-cols-3 gap-2.5">
-          {(["today", "week", "month"] as const).map((key) => (
-            <article
-              key={key}
-              className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3"
-            >
-              <p className="text-[0.6rem] uppercase tracking-[0.18em] text-white/45">
-                {key === "today" ? "Today" : key === "week" ? "This week" : "This month"}
-              </p>
-              <p className="mt-1.5 text-lg font-semibold tabular-nums tracking-tight text-white">
-                {formatSummaryDuration(totals[key])}
-              </p>
-            </article>
-          ))}
+        <div className="mt-6 flex items-end justify-between gap-4">
+          <div>
+            <p className="eyebrow">This week</p>
+            <p className="numeric mt-2 text-[2.9rem] font-semibold leading-none text-text-1">
+              {formatSummaryDuration(totals.week)}
+            </p>
+          </div>
+          <dl className="space-y-2 pb-1 text-right">
+            <div>
+              <dt className="eyebrow !text-[0.58rem]">Today</dt>
+              <dd className="numeric mt-0.5 text-base font-semibold text-text-1">
+                {formatSummaryDuration(totals.today)}
+              </dd>
+            </div>
+            <div>
+              <dt className="eyebrow !text-[0.58rem]">This month</dt>
+              <dd className="numeric mt-0.5 text-base font-semibold text-text-1">
+                {formatSummaryDuration(totals.month)}
+              </dd>
+            </div>
+          </dl>
         </div>
       </ScreenHeader>
 
       <SectionCard
         title="Last 7 days"
         aside={
-          <p className="text-xs text-white/50">
+          <p className="numeric text-xs text-text-3">
             {formatSummaryDuration(sevenDayTotal)} · {activeDays}/7 days
           </p>
         }
@@ -109,7 +118,18 @@ export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; tod
           />
         ) : (
           <>
-            <div className="flex items-end justify-between gap-2" style={{ height: CHART_HEIGHT }}>
+            <div className="relative flex items-end justify-between gap-2.5" style={{ height: CHART_HEIGHT }}>
+              {maxBarMs > 0 && sevenDayTotal / 7 > 0 && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 border-t border-dashed border-ice/40"
+                  style={{ bottom: (sevenDayTotal / 7 / maxBarMs) * CHART_HEIGHT }}
+                >
+                  <span className="absolute -top-4 right-0 text-[0.58rem] font-semibold uppercase tracking-[0.14em] text-ice/80">
+                    avg
+                  </span>
+                </div>
+              )}
               {bars.map((bar, index) => {
                 const isToday = bar.dayKey === todayKey;
                 const isSelected = bar.dayKey === selectedBarKey;
@@ -123,17 +143,17 @@ export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; tod
                       weekday: "long",
                     })}: ${formatSummaryDuration(bar.totalMs)}`}
                     aria-pressed={isSelected}
-                    className="flex h-full flex-1 flex-col justify-end rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                    className="relative flex h-full min-w-0 flex-1 flex-col justify-end rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
                   >
                     <motion.div
-                      className="flex w-full flex-col-reverse overflow-hidden rounded-[10px] bg-white/[0.06]"
+                      className="flex w-full flex-col-reverse overflow-hidden rounded-[8px] bg-white/[0.05]"
                       initial={{ height: 0 }}
                       animate={{ height: Math.max(height, bar.totalMs > 0 ? 6 : 4) }}
-                      transition={{ duration: 0.55, ease: "easeOut", delay: index * 0.05 }}
+                      transition={{ duration: DURATION.slow, ease: EASE_OUT, delay: index * 0.035 }}
                       style={{
-                        opacity: selectedBarKey && !isSelected ? 0.45 : 1,
-                        outline: isToday ? "1px solid rgba(255,255,255,0.28)" : undefined,
-                        outlineOffset: 2,
+                        opacity: selectedBarKey && !isSelected ? 0.35 : 1,
+                        boxShadow: isToday ? "0 0 0 1.5px var(--ice)" : undefined,
+                        transition: "opacity 200ms",
                       }}
                     >
                       {bar.segments.map((segment) => (
@@ -154,15 +174,15 @@ export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; tod
               {bars.map((bar) => (
                 <p
                   key={bar.dayKey}
-                  className={`flex-1 text-center text-[0.62rem] font-medium uppercase tracking-[0.08em] ${
-                    bar.dayKey === todayKey ? "text-white" : "text-white/45"
+                  className={`flex-1 text-center text-[0.66rem] font-semibold uppercase tracking-[0.08em] ${
+                    bar.dayKey === todayKey ? "text-ice" : "text-text-3"
                   }`}
                 >
                   {bar.date.toLocaleDateString(undefined, { weekday: "narrow" })}
                 </p>
               ))}
             </div>
-            <p className="mt-3 min-h-[1rem] text-center text-xs text-white/55">
+            <p className="numeric mt-4 min-h-[1rem] text-center text-xs text-text-2">
               {selectedBar
                 ? `${selectedBar.date.toLocaleDateString(undefined, {
                     weekday: "short",
@@ -177,7 +197,7 @@ export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; tod
 
       <SectionCard
         title="Goals"
-        aside={<Target className="size-4 text-white/45" />}
+        aside={<Target className="size-4 text-text-3" />}
       >
         {goals.todayTotal === 0 ? (
           <EmptyState
@@ -191,12 +211,12 @@ export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; tod
               size={104}
               stroke={8}
               ratio={goals.weekHitRate}
-              color="#84D7B4"
+              color="#6CF2C2"
             >
-              <p className="text-lg font-semibold text-white">
+              <p className="numeric text-xl font-semibold text-text-1">
                 {Math.round(goals.weekHitRate * 100)}%
               </p>
-              <p className="text-[0.55rem] uppercase tracking-[0.16em] text-white/45">7-day hit</p>
+              <p className="text-[0.55rem] font-semibold uppercase tracking-[0.16em] text-text-3">7-day hit</p>
             </Ring>
             <dl className="space-y-2">
               <GoalStat label="Today" value={`${goals.todayMet}/${goals.todayTotal} met`} />
@@ -206,7 +226,7 @@ export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; tod
                 label="Perfect streak"
                 value={
                   <span className="inline-flex items-center gap-1">
-                    <Flame className="size-3.5 text-[#FFB47D]" />
+                    <Flame className="size-3.5 text-ember" />
                     {goals.perfectStreak} {goals.perfectStreak === 1 ? "day" : "days"}
                   </span>
                 }
@@ -219,26 +239,13 @@ export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; tod
       <SectionCard
         title="Activity breakdown"
         aside={
-          <div className="flex rounded-full border border-white/12 bg-[#0f141d] p-0.5">
-            {(Object.keys(PERIOD_LABELS) as Period[]).map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setPeriod(key)}
-                aria-pressed={period === key}
-                className="relative rounded-full px-2.5 py-1 text-[0.68rem] font-medium text-white/60 aria-pressed:text-white"
-              >
-                {period === key && (
-                  <motion.span
-                    layoutId="insights-period"
-                    className="absolute inset-0 rounded-full bg-white/[0.09]"
-                    transition={{ type: "spring", damping: 30, stiffness: 380 }}
-                  />
-                )}
-                <span className="relative">{PERIOD_LABELS[key]}</span>
-              </button>
-            ))}
-          </div>
+          <Segmented
+            label="Breakdown range"
+            layoutId="insights-period"
+            value={period}
+            onChange={setPeriod}
+            options={(Object.keys(PERIOD_LABELS) as Period[]).map((key) => ({ value: key, label: PERIOD_LABELS[key] }))}
+          />
         }
       >
         {breakdown.length === 0 ? (
@@ -252,7 +259,7 @@ export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; tod
             }
           />
         ) : (
-          <ul key={period} className="space-y-2">
+          <ul key={period}>
             {breakdown.map((entry, index) => (
               <ActivityBreakdownRow key={entry.activity.id} index={index} {...entry} />
             ))}
@@ -265,9 +272,9 @@ export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; tod
 
 function GoalStat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] pb-1.5 last:border-0 last:pb-0">
-      <dt className="text-xs text-white/50">{label}</dt>
-      <dd className="text-sm font-semibold tabular-nums text-white">{value}</dd>
+    <div className="flex items-center justify-between gap-2 border-b border-line pb-1.5 last:border-0 last:pb-0">
+      <dt className="text-xs text-text-3">{label}</dt>
+      <dd className="numeric text-sm font-semibold text-text-1">{value}</dd>
     </div>
   );
 }

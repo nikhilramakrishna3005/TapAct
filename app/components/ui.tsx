@@ -17,7 +17,30 @@ import {
   Palette,
   PenLine,
 } from "lucide-react";
+import { DURATION, EASE_OUT, SPRING_SNAPPY } from "@/lib/motion";
 import { MS_PER_MINUTE, type Activity, type ActivityIconName } from "@/lib/tracker";
+import { OrbitMark } from "./Orbit";
+
+/** Expressive activity accents, tuned to stay legible on the graphite surfaces. */
+export const COLOR_OPTIONS = [
+  "#8E7BFF",
+  "#5FE3FF",
+  "#6CF2C2",
+  "#A7F06B",
+  "#FFE36B",
+  "#FFB86B",
+  "#FF7AB6",
+  "#C2C6D6",
+];
+
+/** Translucent wash of an activity color (hex) for tinted surfaces. */
+export function tint(hex: string, alpha: number): string {
+  const value = Number.parseInt(hex.slice(1), 16);
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex) || Number.isNaN(value)) {
+    return `rgba(255,255,255,${alpha})`;
+  }
+  return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${alpha})`;
+}
 
 export const ICON_REGISTRY: Record<ActivityIconName, { label: string; icon: LucideIcon }> = {
   brain: { label: "Focus", icon: BrainCircuit },
@@ -92,14 +115,23 @@ export function Ring({
 
   return (
     <div className="relative inline-grid place-items-center">
-      <svg width={size} height={size} className="-rotate-90">
+      <svg width={size} height={size} className="-rotate-90" aria-hidden="true">
         <circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
           strokeWidth={stroke}
           fill="none"
-          className="stroke-white/10"
+          stroke="rgba(255,255,255,0.07)"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius - stroke}
+          strokeWidth={1}
+          fill="none"
+          stroke="rgba(255,255,255,0.06)"
+          strokeDasharray="2 5"
         />
         <motion.circle
           cx={size / 2}
@@ -112,7 +144,7 @@ export function Ring({
           strokeDasharray={circumference}
           animate={{ strokeDashoffset: offset }}
           initial={false}
-          transition={{ duration: 0.5, ease: "easeOut" }}
+          transition={{ duration: DURATION.slow, ease: EASE_OUT }}
         />
       </svg>
       <div className="pointer-events-none absolute text-center">{children}</div>
@@ -130,9 +162,12 @@ export function ScreenHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <header className="rounded-[28px] border border-white/10 bg-[#11161e] px-4 py-4 shadow-[0_18px_50px_-34px_rgba(0,0,0,1)]">
-      <p className="text-[0.63rem] uppercase tracking-[0.25em] text-white/50">{eyebrow}</p>
-      <h1 className="mt-1 text-xl font-semibold tracking-tight text-white">{title}</h1>
+    <header className="pt-2">
+      <div className="flex items-center gap-2">
+        <OrbitMark size={18} />
+        <p className="eyebrow">{eyebrow}</p>
+      </div>
+      <h1 className="display mt-3 text-[2rem]">{title}</h1>
       {children}
     </header>
   );
@@ -148,9 +183,9 @@ export function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="mt-3 rounded-[24px] border border-white/10 bg-[#11161e] px-4 py-4">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[1.02rem] font-semibold tracking-tight text-white">{title}</h2>
+    <section className="panel mt-4 px-4 py-4">
+      <div className="flex min-h-8 items-center justify-between gap-3">
+        <h2 className="text-[0.95rem] font-semibold tracking-[-0.01em] text-text-1">{title}</h2>
         {aside}
       </div>
       <div className="mt-3">{children}</div>
@@ -158,14 +193,97 @@ export function SectionCard({
   );
 }
 
+export function StatTile({
+  label,
+  value,
+  accent,
+  emphasis = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  accent?: string;
+  emphasis?: boolean;
+}) {
+  return (
+    <article
+      className="relative overflow-hidden rounded-[var(--radius-md)] border border-line bg-ink-1 px-3.5 py-3"
+      style={emphasis && accent ? { borderColor: tint(accent, 0.35) } : undefined}
+    >
+      {accent && (
+        <span
+          aria-hidden="true"
+          className="absolute left-0 top-3 h-5 w-[3px] rounded-r-full"
+          style={{ background: accent }}
+        />
+      )}
+      <p className="eyebrow !text-[0.58rem] !tracking-[0.18em]">{label}</p>
+      <p className={`numeric mt-1.5 font-semibold text-text-1 ${emphasis ? "text-[1.6rem]" : "text-lg"}`}>
+        {value}
+      </p>
+    </article>
+  );
+}
+
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  layoutId,
+  label,
+  size = "sm",
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+  layoutId: string;
+  label: string;
+  size?: "sm" | "md";
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className={`flex rounded-full border border-line-strong bg-ink-0 p-1 ${size === "md" ? "w-full" : ""}`}
+    >
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(option.value)}
+            className={`relative flex-1 rounded-full font-medium transition-colors ${
+              size === "md" ? "min-h-10 px-3 text-sm" : "min-h-8 px-3 text-[0.72rem]"
+            } ${selected ? "text-ink-0" : "text-text-2 hover:text-text-1"}`}
+          >
+            {selected && (
+              <motion.span
+                layoutId={layoutId}
+                className="absolute inset-0 rounded-full bg-text-1"
+                transition={SPRING_SNAPPY}
+              />
+            )}
+            <span className="relative">{option.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function EmptyState({ icon: Icon, title, body }: { icon: LucideIcon; title: string; body: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.015] px-4 py-7 text-center">
-      <div className="mx-auto grid size-11 place-items-center rounded-2xl border border-white/10 bg-white/[0.03] text-white/60">
-        <Icon className="size-5" />
+    <div className="relative overflow-hidden rounded-[var(--radius-md)] border border-dashed border-line-strong px-4 py-8 text-center">
+      <div className="relative mx-auto grid size-14 place-items-center">
+        <svg viewBox="0 0 56 56" className="absolute inset-0" aria-hidden="true">
+          <circle cx="28" cy="28" r="26" fill="none" stroke="rgba(255,255,255,0.1)" strokeDasharray="2 5" />
+          <circle cx="28" cy="2" r="2.5" fill="var(--volt)" />
+        </svg>
+        <Icon className="size-5 text-text-2" />
       </div>
-      <p className="mt-3 text-sm font-semibold text-white/85">{title}</p>
-      <p className="mx-auto mt-1 max-w-[260px] text-xs leading-relaxed text-white/50">{body}</p>
+      <p className="mt-3 text-sm font-semibold text-text-1">{title}</p>
+      <p className="mx-auto mt-1 max-w-[260px] text-xs leading-relaxed text-text-3">{body}</p>
     </div>
   );
 }
@@ -189,43 +307,41 @@ export function ActivityBreakdownRow({
     <motion.li
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, delay: index * 0.04 }}
-      className="rounded-2xl border border-white/10 bg-[#0f141d] px-3 py-3"
+      transition={{ duration: DURATION.base, ease: EASE_OUT, delay: Math.min(index, 6) * 0.035 }}
+      className="py-3 first:pt-0 last:pb-0 [&:not(:last-child)]:border-b [&:not(:last-child)]:border-line"
     >
       <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex min-w-0 items-center gap-3">
           <div
-            className="rounded-xl border border-white/10 p-2"
-            style={{ color: activity.color, background: "rgba(255,255,255,0.03)" }}
+            className="grid size-9 shrink-0 place-items-center rounded-xl"
+            style={{ color: activity.color, background: tint(activity.color, 0.12) }}
           >
             <Icon className="size-4" />
           </div>
           <div className="min-w-0">
-            <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-white">
+            <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-text-1">
               <span className="truncate">{activity.name}</span>
               {isArchived && (
-                <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-white/12 px-1.5 py-0.5 text-[0.55rem] font-medium uppercase tracking-[0.12em] text-white/50">
+                <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-line-strong px-1.5 py-0.5 text-[0.55rem] font-medium uppercase tracking-[0.12em] text-text-3">
                   <Archive className="size-2.5" />
                   Archived
                 </span>
               )}
             </p>
             {trailing ?? (
-              <p className="text-xs text-white/50">{Math.round(share * 100)}% of tracked time</p>
+              <p className="text-xs text-text-3">{Math.round(share * 100)}% of tracked time</p>
             )}
           </div>
         </div>
-        <p className="shrink-0 text-sm font-semibold tabular-nums text-white">
-          {formatSummaryDuration(ms)}
-        </p>
+        <p className="numeric shrink-0 text-sm font-semibold text-text-1">{formatSummaryDuration(ms)}</p>
       </div>
-      <div className="mt-2.5 h-1.5 rounded-full bg-white/10">
+      <div className="ml-12 mt-2 h-1 rounded-full bg-white/[0.06]">
         <motion.div
           className="h-full rounded-full"
           style={{ background: activity.color }}
           initial={{ width: 0 }}
           animate={{ width: `${Math.max(clampRatio(share) * 100, 2)}%` }}
-          transition={{ duration: 0.5, ease: "easeOut", delay: index * 0.04 }}
+          transition={{ duration: DURATION.slow, ease: EASE_OUT, delay: Math.min(index, 6) * 0.035 }}
         />
       </div>
     </motion.li>

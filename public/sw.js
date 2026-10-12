@@ -2,7 +2,7 @@
 // Activity records live only in localStorage and are never sent over the network,
 // so this worker only ever caches the public app shell: the HTML page, hashed
 // build assets, the manifest and icons.
-const CACHE_NAME = "tapact-shell-v1";
+const CACHE_NAME = "tapact-shell-v2";
 const SHELL_URL = "/";
 const PRECACHE_URLS = [
   SHELL_URL,
