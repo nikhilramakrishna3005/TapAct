@@ -49,8 +49,10 @@ import {
   type WritableStorageLike,
 } from "@/lib/trackerStore";
 import { getInitials } from "@/lib/auth/account";
+import { recordCommit, SYNC_DIRTY_EVENT } from "@/lib/sync/capture";
 import { ActivityCard } from "./components/ActivityCard";
 import { AuthProvider, useAuth } from "./components/AuthProvider";
+import { CloudSyncProvider } from "./components/CloudSync";
 import { HistoryView } from "./components/HistoryView";
 import { InsightsView } from "./components/InsightsView";
 import { MotionPrefsProvider, useMotionPrefs } from "./components/MotionPrefs";
@@ -371,9 +373,14 @@ function Home() {
   const [editDraft, setEditDraft] = useState<ActivityDraft>(EMPTY_DRAFT);
   const [editError, setEditError] = useState<string | null>(null);
 
-  const commit = useCallback((update: TrackerUpdate) => {
+  const commit = useCallback((update: TrackerUpdate, options?: { source?: "sync" }) => {
     const now = Date.now();
-    const result = commitTrackerUpdate(getBrowserStorage(), trackerRef.current, update, now);
+    const storage = getBrowserStorage();
+    const result = commitTrackerUpdate(storage, trackerRef.current, update, now);
+    const fromSync = options?.source === "sync";
+    if (recordCommit(storage, result.base, result.state, now, { captureActivities: !fromSync }) && !fromSync) {
+      window.dispatchEvent(new Event(SYNC_DIRTY_EVENT));
+    }
     trackerRef.current = result.state;
     setTracker(result.state);
     setNowMs(now);
@@ -669,6 +676,7 @@ function Home() {
   }
 
   return (
+    <CloudSyncProvider commit={commit} tracker={tracker}>
     <div className="min-h-screen text-text-1">
       <motion.main
         className="mx-auto w-full max-w-[430px] px-5 pb-[calc(124px+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))]"
@@ -1064,5 +1072,6 @@ function Home() {
         {onboarding === "show" && <Onboarding key="onboarding" onFinish={handleOnboardingFinish} />}
       </AnimatePresence>
     </div>
+    </CloudSyncProvider>
   );
 }

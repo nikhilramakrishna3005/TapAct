@@ -291,6 +291,10 @@ body::before {
   animation: orbit-spin 1.1s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
 }
 
+.busy-spin-icon {
+  animation: orbit-spin 1s linear infinite;
+}
+
 @keyframes tap-pulse {
   0%,
   100% {
@@ -348,7 +352,8 @@ body::before {
   .ambient-spin,
   .ambient-breathe,
   .busy-orbit,
-  .busy-spin {
+  .busy-spin,
+  .busy-spin-icon {
     animation: none !important;
   }
 }
