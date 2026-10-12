@@ -30,6 +30,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -40,10 +41,8 @@ import {
   getDayKeyForMs,
   getDayTotalElapsed,
   getElapsedByActivityForDay,
-  loadTrackerState,
   MS_PER_MINUTE,
   processActiveTimer,
-  serializeTrackerState,
   STORAGE_KEY_V3,
   toggleActivity,
   type Activity,
@@ -51,6 +50,21 @@ import {
   type TrackerState,
   updateActivity,
 } from "@/lib/tracker";
+import {
+  commitTrackerUpdate,
+  syncFromStorage,
+  type PersistFailureReason,
+  type TrackerUpdate,
+  type WritableStorageLike,
+} from "@/lib/trackerStore";
+
+function getBrowserStorage(): WritableStorageLike | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
 
 const DEFAULT_ACTIVITY_GOAL = 45;
 const TRACKED_TIME_CAP_MS = 8 * 60 * MS_PER_MINUTE;
@@ -195,8 +209,10 @@ function MetricRing({
 
 export default function Home() {
   const [tracker, setTracker] = useState<TrackerState>(() => createDefaultTrackerState(Date.now()));
+  const trackerRef = useRef<TrackerState | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [hydrated, setHydrated] = useState(false);
+  const [persistFailure, setPersistFailure] = useState<PersistFailureReason | null>(null);
 
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
   const [isManageSheetOpen, setIsManageSheetOpen] = useState(false);
@@ -212,47 +228,56 @@ export default function Home() {
   const [editGoal, setEditGoal] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
 
+  const commit = useCallback((update: TrackerUpdate) => {
+    const now = Date.now();
+    const result = commitTrackerUpdate(getBrowserStorage(), trackerRef.current, update, now);
+    trackerRef.current = result.state;
+    setTracker(result.state);
+    setNowMs(now);
+    setPersistFailure(result.failureReason);
+  }, []);
+
+  const syncWithOtherTabs = useCallback(() => {
+    const now = Date.now();
+    const next = syncFromStorage(getBrowserStorage(), trackerRef.current, now);
+    trackerRef.current = next;
+    setTracker(next);
+    setNowMs(now);
+  }, []);
+
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      const now = Date.now();
-      setNowMs(now);
-      setTracker((previous) => processActiveTimer(previous, now));
+      setNowMs(Date.now());
     }, 1000);
     return () => window.clearInterval(intervalId);
   }, []);
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        const now = Date.now();
-        setNowMs(now);
-        setTracker((previous) => processActiveTimer(previous, now));
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === STORAGE_KEY_V3) {
+        syncWithOtherTabs();
       }
     };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        syncWithOtherTabs();
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", syncWithOtherTabs);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", syncWithOtherTabs);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [syncWithOtherTabs]);
 
   useEffect(() => {
-    const now = Date.now();
-    try {
-      setTracker(loadTrackerState(window.localStorage, now));
-    } catch {
-      setTracker(createDefaultTrackerState(now));
-    } finally {
-      setHydrated(true);
-      setNowMs(now);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) {
-      return;
-    }
-    window.localStorage.setItem(STORAGE_KEY_V3, serializeTrackerState(tracker));
-  }, [hydrated, tracker]);
+    // Persisting on load also completes any v1/v2 migration into the v3 key.
+    commit((base) => base);
+    setHydrated(true);
+  }, [commit]);
 
   useEffect(() => {
     if (!isAddSheetOpen && !isManageSheetOpen && !editActivityId) {
@@ -266,9 +291,10 @@ export default function Home() {
   }, [editActivityId, isAddSheetOpen, isManageSheetOpen]);
 
   const todayKey = useMemo(() => getDayKeyForMs(nowMs), [nowMs]);
+  const liveTracker = useMemo(() => processActiveTimer(tracker, nowMs), [nowMs, tracker]);
   const elapsedByActivity = useMemo(() => {
-    return getElapsedByActivityForDay(tracker, todayKey);
-  }, [todayKey, tracker]);
+    return getElapsedByActivityForDay(liveTracker, todayKey);
+  }, [liveTracker, todayKey]);
 
   const activeActivities = useMemo(
     () => tracker.activities.filter((activity) => activity.archivedAtMs === null),
@@ -280,8 +306,8 @@ export default function Home() {
   );
 
   const totalTrackedMs = useMemo(() => {
-    return getDayTotalElapsed(tracker, todayKey);
-  }, [todayKey, tracker]);
+    return getDayTotalElapsed(liveTracker, todayKey);
+  }, [liveTracker, todayKey]);
 
   const activitiesWithGoals = useMemo(
     () => activeActivities.filter((activity) => activity.goalMinutes && activity.goalMinutes > 0),
@@ -314,11 +340,12 @@ export default function Home() {
       : tracker.activities.find((activity) => activity.id === tracker.activeActivityId) ?? null;
   const activeElapsedMs = activeActivity ? elapsedByActivity[activeActivity.id] ?? 0 : 0;
 
-  const handleActivityTap = useCallback((activityId: string) => {
-    const now = Date.now();
-    setNowMs(now);
-    setTracker((previous) => toggleActivity(previous, activityId, now));
-  }, []);
+  const handleActivityTap = useCallback(
+    (activityId: string) => {
+      commit((base, now) => toggleActivity(base, activityId, now));
+    },
+    [commit],
+  );
 
   const resetAddForm = useCallback(() => {
     setDraftName("");
@@ -361,14 +388,12 @@ export default function Home() {
       if (!confirmed) {
         return;
       }
-      const now = Date.now();
-      setNowMs(now);
-      setTracker((previous) => archiveActivity(previous, activity.id, now));
+      commit((base, now) => archiveActivity(base, activity.id, now));
       if (editActivityId === activity.id) {
         closeEditSheet();
       }
     },
-    [closeEditSheet, editActivityId],
+    [closeEditSheet, commit, editActivityId],
   );
 
   const handleAddActivity = useCallback(
@@ -390,22 +415,22 @@ export default function Home() {
         goalMinutes = Math.round(parsedGoal);
       }
 
-      setTracker((previous) => {
-        const id = createActivityId(name);
-        return addActivity(previous, {
+      const id = createActivityId(name);
+      commit((base) =>
+        addActivity(base, {
           id,
           name: name.slice(0, 36),
           iconKey: draftIcon,
           color: draftColor,
           goalMinutes,
           cue: "Custom activity",
-        });
-      });
+        }),
+      );
 
       closeAddSheet();
       resetAddForm();
     },
-    [closeAddSheet, draftColor, draftGoal, draftIcon, draftName, resetAddForm],
+    [closeAddSheet, commit, draftColor, draftGoal, draftIcon, draftName, resetAddForm],
   );
 
   const handleEditActivity = useCallback(
@@ -431,8 +456,8 @@ export default function Home() {
         goalMinutes = Math.round(parsedGoal);
       }
 
-      setTracker((previous) =>
-        updateActivity(previous, editActivityId, {
+      commit((base) =>
+        updateActivity(base, editActivityId, {
           name: name.slice(0, 36),
           iconKey: editIcon,
           color: editColor,
@@ -441,7 +466,7 @@ export default function Home() {
       );
       closeEditSheet();
     },
-    [closeEditSheet, editActivityId, editColor, editGoal, editIcon, editName],
+    [closeEditSheet, commit, editActivityId, editColor, editGoal, editIcon, editName],
   );
 
   return (
@@ -484,6 +509,18 @@ export default function Home() {
             />
           </section>
         </header>
+
+        {persistFailure && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="mt-3 rounded-2xl border border-[#FFB47D]/30 bg-[#FFB47D]/[0.06] px-3 py-2 text-xs text-[#FFD3B0]"
+          >
+            {persistFailure === "quota"
+              ? "Browser storage is full. Recent tracking changes aren't saved on this device."
+              : "Browser storage is unavailable. Recent tracking changes aren't saved on this device."}
+          </p>
+        )}
 
         <AnimatePresence initial={false}>
           {activeActivity && (

@@ -26,6 +26,7 @@ export type DailyRecords = Record<string, Record<string, number>>;
 
 export type TrackerState = {
   schemaVersion: 3;
+  revision: number;
   activeActivityId: string | null;
   activeSinceMs: number | null;
   lastProcessedMs: number | null;
@@ -43,6 +44,7 @@ type LegacyTrackerState = {
 
 type V3Candidate = {
   schemaVersion?: unknown;
+  revision?: unknown;
   activeActivityId?: unknown;
   activeSinceMs?: unknown;
   lastProcessedMs?: unknown;
@@ -260,6 +262,7 @@ export function createDefaultTrackerState(nowMs: number): TrackerState {
   void nowMs;
   return {
     schemaVersion: 3,
+    revision: 0,
     activeActivityId: null,
     activeSinceMs: null,
     lastProcessedMs: null,
@@ -307,10 +310,10 @@ function normalizeActiveTimer(
   }
 
   const safeActiveSince = Math.min(activeSinceMs, nowMs);
-  const parsedLastProcessed = sanitizeMs(state.lastProcessedMs);
+  // Never move lastProcessedMs backwards (e.g. clock adjustments): time up to it is already credited.
   const lastProcessedMs = Math.max(
     safeActiveSince,
-    Math.min(parsedLastProcessed ?? safeActiveSince, nowMs),
+    sanitizeMs(state.lastProcessedMs) ?? safeActiveSince,
   );
 
   return {
@@ -331,8 +334,10 @@ function normalizeV3State(value: unknown, nowMs: number): TrackerState | null {
 
   const activities = normalizeStateCore(candidate.activities, DEFAULT_ACTIVITIES);
   const validActivityIds = new Set(activities.map((activity) => activity.id));
+  const revision = sanitizeMs(candidate.revision);
   const state: TrackerState = {
     schemaVersion: 3,
+    revision: revision === null ? 0 : Math.floor(revision),
     activeActivityId:
       typeof candidate.activeActivityId === "string" ? candidate.activeActivityId : null,
     activeSinceMs:
@@ -383,6 +388,7 @@ function normalizeLegacyState(value: unknown, nowMs: number): TrackerState | nul
 
   const migrated: TrackerState = {
     schemaVersion: 3,
+    revision: 0,
     activities,
     dailyRecords,
     activeActivityId,
@@ -402,6 +408,7 @@ function safeJsonParse(raw: string): unknown | null {
   }
 }
 
+/** Throws if the storage itself cannot be read (e.g. access denied). */
 export function loadTrackerState(storage: StorageLike, nowMs: number): TrackerState {
   const v3Raw = storage.getItem(STORAGE_KEY_V3);
   if (v3Raw) {

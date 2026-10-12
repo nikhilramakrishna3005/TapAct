@@ -130,6 +130,19 @@ describe("tracker timer reliability", () => {
     expect(getDayTotalElapsed(finished, day2Key)).toBe(5 * 60_000);
   });
 
+  it("does not re-credit time when the system clock moves backwards", () => {
+    const startMs = new Date(2026, 1, 3, 10, 0, 0, 0).getTime();
+    const running = toggleActivity(createDefaultTrackerState(startMs), "coding", startMs);
+    const settled = processActiveTimer(running, startMs + 60_000);
+    const storage = createMockStorage({ [STORAGE_KEY_V3]: JSON.stringify(settled) });
+
+    const reloadedEarlier = loadTrackerState(storage, startMs + 30_000);
+    const caughtUp = processActiveTimer(reloadedEarlier, startMs + 90_000);
+
+    const elapsed = getElapsedByActivityForDay(caughtUp, getDayKeyForMs(startMs));
+    expect(elapsed.coding).toBe(90_000);
+  });
+
   it("falls back to defaults when v3 storage is malformed", () => {
     const nowMs = new Date(2026, 2, 5, 7, 0, 0, 0).getTime();
     const storage = createMockStorage({
