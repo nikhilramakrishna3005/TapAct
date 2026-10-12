@@ -1,28 +1,15 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import type { LucideIcon } from "lucide-react";
 import {
-  BookOpen,
-  BrainCircuit,
-  BriefcaseBusiness,
+  Archive,
   CheckCircle2,
-  Code2,
-  Dumbbell,
-  Globe2,
-  HeartPulse,
   House,
-  Languages,
   LineChart,
-  MessageSquare,
-  Music2,
-  Palette,
-  PenLine,
+  PencilLine,
   Plus,
   Settings2,
   Sparkles,
-  PencilLine,
-  Archive,
   X,
 } from "lucide-react";
 import {
@@ -57,6 +44,16 @@ import {
   type TrackerUpdate,
   type WritableStorageLike,
 } from "@/lib/trackerStore";
+import { HistoryView } from "./components/HistoryView";
+import { InsightsView } from "./components/InsightsView";
+import {
+  clampRatio,
+  formatClock,
+  formatCompactHours,
+  formatSummaryDuration,
+  ICON_REGISTRY,
+  Ring,
+} from "./components/ui";
 
 function getBrowserStorage(): WritableStorageLike | null {
   try {
@@ -69,20 +66,13 @@ function getBrowserStorage(): WritableStorageLike | null {
 const DEFAULT_ACTIVITY_GOAL = 45;
 const TRACKED_TIME_CAP_MS = 8 * 60 * MS_PER_MINUTE;
 
-const ICON_REGISTRY: Record<ActivityIconName, { label: string; icon: LucideIcon }> = {
-  brain: { label: "Focus", icon: BrainCircuit },
-  dumbbell: { label: "Fitness", icon: Dumbbell },
-  message: { label: "Talk", icon: MessageSquare },
-  book: { label: "Reading", icon: BookOpen },
-  briefcase: { label: "Work", icon: BriefcaseBusiness },
-  code: { label: "Code", icon: Code2 },
-  languages: { label: "Language", icon: Languages },
-  heart: { label: "Health", icon: HeartPulse },
-  music: { label: "Music", icon: Music2 },
-  globe: { label: "Global", icon: Globe2 },
-  pen: { label: "Writing", icon: PenLine },
-  palette: { label: "Creative", icon: Palette },
-};
+type Tab = "home" | "insights" | "history";
+
+const NAV_ITEMS = [
+  { id: "home", label: "Home", icon: House },
+  { id: "insights", label: "Insights", icon: LineChart },
+  { id: "history", label: "History", icon: CheckCircle2 },
+] as const;
 
 const COLOR_OPTIONS = [
   "#8B95FF",
@@ -94,92 +84,6 @@ const COLOR_OPTIONS = [
   "#9DE582",
   "#B6BFCB",
 ];
-
-function formatClock(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
-    2,
-    "0",
-  )}:${String(seconds).padStart(2, "0")}`;
-}
-
-function formatSummaryDuration(ms: number): string {
-  const totalMinutes = Math.floor(ms / MS_PER_MINUTE);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (hours === 0) {
-    return `${minutes}m`;
-  }
-  if (minutes === 0) {
-    return `${hours}h`;
-  }
-  return `${hours}h ${minutes}m`;
-}
-
-function formatCompactHours(ms: number): string {
-  const totalMinutes = Math.floor(ms / MS_PER_MINUTE);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (hours > 0) {
-    return minutes === 0 ? `${hours}h` : `${hours}.${Math.floor(minutes / 6)}h`;
-  }
-  return `${Math.max(totalMinutes, 0)}m`;
-}
-
-function clampRatio(value: number): number {
-  return Math.max(0, Math.min(1, value));
-}
-
-function Ring({
-  size,
-  stroke,
-  ratio,
-  color,
-  children,
-}: {
-  size: number;
-  stroke: number;
-  ratio: number;
-  color: string;
-  children: React.ReactNode;
-}) {
-  const safeRatio = clampRatio(ratio);
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference * (1 - safeRatio);
-
-  return (
-    <div className="relative inline-grid place-items-center">
-      <svg width={size} height={size} className="-rotate-90">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          strokeWidth={stroke}
-          fill="none"
-          className="stroke-white/10"
-        />
-        <motion.circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          strokeWidth={stroke}
-          fill="none"
-          stroke={color}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          animate={{ strokeDashoffset: offset }}
-          initial={false}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-        />
-      </svg>
-      <div className="pointer-events-none absolute text-center">{children}</div>
-    </div>
-  );
-}
 
 function MetricRing({
   label,
@@ -212,6 +116,7 @@ export default function Home() {
   const trackerRef = useRef<TrackerState | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [hydrated, setHydrated] = useState(false);
+  const [tab, setTab] = useState<Tab>("home");
   const [persistFailure, setPersistFailure] = useState<PersistFailureReason | null>(null);
 
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
@@ -472,6 +377,20 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#090b10] text-[#edf2f7]">
       <main className="mx-auto w-full max-w-[390px] px-4 pb-[122px] pt-3">
+        <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+        >
+        {tab === "insights" ? (
+          <InsightsView tracker={liveTracker} todayKey={todayKey} />
+        ) : tab === "history" ? (
+          <HistoryView tracker={liveTracker} todayKey={todayKey} />
+        ) : (
+        <>
         <header className="rounded-[28px] border border-white/10 bg-[#11161e] px-4 py-4 shadow-[0_18px_50px_-34px_rgba(0,0,0,1)]">
           <div className="flex items-center justify-between">
             <div>
@@ -671,6 +590,10 @@ export default function Home() {
             )}
           </div>
         </section>
+        </>
+        )}
+        </motion.div>
+        </AnimatePresence>
 
         {!hydrated && (
           <p className="mt-3 text-center text-xs text-white/45">Syncing your local session…</p>
@@ -679,37 +602,53 @@ export default function Home() {
 
       <nav className="pointer-events-none fixed inset-x-0 bottom-4 z-20">
         <div className="pointer-events-auto mx-auto grid w-[calc(100%-24px)] max-w-[360px] grid-cols-4 items-center gap-1 rounded-2xl border border-white/12 bg-[#0f141d]/95 px-2 py-2 shadow-[0_20px_40px_-28px_rgba(0,0,0,1)] backdrop-blur">
-          {[
-            { label: "Home", icon: House, active: true },
-            { label: "Insights", icon: LineChart, active: false },
-            { label: "History", icon: CheckCircle2, active: false },
-            { label: "Settings", icon: Settings2, active: false },
-          ].map((item) => {
+          {NAV_ITEMS.map((item) => {
             const NavIcon = item.icon;
+            const isCurrent = tab === item.id;
             return (
               <button
-                key={item.label}
+                key={item.id}
                 type="button"
-                disabled={!item.active}
-                aria-current={item.active ? "page" : undefined}
-                className="rounded-xl px-1.5 py-1.5 text-center disabled:cursor-not-allowed"
+                onClick={() => {
+                  if (!isCurrent) {
+                    setTab(item.id);
+                    window.scrollTo({ top: 0 });
+                  }
+                }}
+                aria-current={isCurrent ? "page" : undefined}
+                className="relative rounded-xl px-1.5 py-2 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
               >
+                {isCurrent && (
+                  <motion.span
+                    layoutId="nav-active"
+                    className="absolute inset-0 rounded-xl bg-white/[0.08]"
+                    transition={{ type: "spring", damping: 30, stiffness: 380 }}
+                  />
+                )}
                 <NavIcon
-                  className={`mx-auto size-4 ${
-                    item.active ? "text-white" : "text-white/45"
+                  className={`relative mx-auto size-4 transition-colors ${
+                    isCurrent ? "text-white" : "text-white/45"
                   }`}
                 />
-                <p className="mt-1 text-[0.64rem] font-medium tracking-[0.03em] text-white/88">
+                <p
+                  className={`relative mt-1 text-[0.64rem] font-medium tracking-[0.03em] transition-colors ${
+                    isCurrent ? "text-white" : "text-white/55"
+                  }`}
+                >
                   {item.label}
                 </p>
-                {!item.active && (
-                  <p className="text-[0.54rem] uppercase tracking-[0.14em] text-white/45">
-                    Soon
-                  </p>
-                )}
               </button>
             );
           })}
+          <button
+            type="button"
+            disabled
+            className="rounded-xl px-1.5 py-1.5 text-center disabled:cursor-not-allowed"
+          >
+            <Settings2 className="mx-auto size-4 text-white/45" />
+            <p className="mt-1 text-[0.64rem] font-medium tracking-[0.03em] text-white/55">Settings</p>
+            <p className="text-[0.54rem] uppercase tracking-[0.14em] text-white/45">Soon</p>
+          </button>
         </div>
       </nav>
 
