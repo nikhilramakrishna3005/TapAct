@@ -444,7 +444,7 @@ type DaySpan = {
   durationMs: number;
 };
 
-function splitAcrossDays(startMs: number, endMs: number): DaySpan[] {
+export function splitAcrossDays(startMs: number, endMs: number): DaySpan[] {
   if (!(endMs > startMs)) {
     return [];
   }

@@ -32,6 +32,7 @@ import type {
   WritableStorageLike,
 } from "@/lib/trackerStore";
 import { AccountSection } from "./AccountSection";
+import { useCloudSync } from "./CloudSync";
 import { useMotionPrefs } from "./MotionPrefs";
 import { formatSummaryDuration, ScreenHeader, SectionCard, Segmented } from "./ui";
 
@@ -104,6 +105,8 @@ export function SettingsView({
   const [storedBytes, setStoredBytes] = useState(0);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const { prefs, systemReduced, reduced, setPreferences } = useMotionPrefs();
+  const sync = useCloudSync();
+  const cloudBacked = sync.status !== "signed-out" && sync.status !== "unavailable" && sync.decision?.kind === "in-sync";
   const [motionSaveFailed, setMotionSaveFailed] = useState(false);
 
   useEffect(() => {
@@ -195,6 +198,7 @@ export function SettingsView({
       return;
     }
     const imported = pendingImport.state;
+    sync.beforeRestore();
     const result = commit((base) => ({ ...imported, revision: base.revision }));
     setPendingImport(null);
     setFeedback(
@@ -365,7 +369,7 @@ export function SettingsView({
 
       <SectionCard title="Storage" aside={<HardDrive className="size-4 text-text-3" />}>
         <dl className="space-y-2">
-          <Row label="Storage mode" value="On this device (local storage)" />
+          <Row label="Storage mode" value={cloudBacked ? "This device + cloud sync" : "On this device (local storage)"} />
           <Row
             label="Status"
             value={
@@ -383,8 +387,9 @@ export function SettingsView({
           <Row label="Total tracked" value={formatSummaryDuration(summary.totalMs)} />
         </dl>
         <p className="mt-3 text-[0.72rem] leading-relaxed text-text-3">
-          No cloud sync yet, even when signed in. Your records never leave this browser unless you export them.
-          Clearing site data removes them, so keep a backup.
+          {cloudBacked
+            ? "Every change is saved on this device first, then synced to your account. Signing out keeps this copy."
+            : "Your records stay in this browser unless you sign in and choose to sync, or export them. Clearing site data removes them, so keep a backup."}
         </p>
       </SectionCard>
 
@@ -446,8 +451,10 @@ export function SettingsView({
                 </dl>
                 <p className="mt-2 text-[0.72rem] leading-relaxed text-text-2">
                   Your current {summary.activityCount} activities and {summary.dayCount} recorded days
-                  will be replaced, and any running timer will stop. This can&apos;t be undone, so
+                  will be replaced on this device, and any running timer will stop. This can&apos;t be undone, so
                   export first if you want to keep them.
+                  {cloudBacked &&
+                    " Your account's synced data isn't changed; you'll be asked whether to merge the restored file into it."}
                 </p>
                 <div className="mt-3 flex gap-2">
                   <button

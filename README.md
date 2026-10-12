@@ -76,7 +76,7 @@ Known limitations:
 
 - `/auth` hosts Sign in, Create account, Forgot password, Set new password and the "check your inbox" states. Continue as guest is always available; nobody is forced to sign in.
 - Settings → Account shows guest vs. signed-in state (name, email, verification) and Sign out. Sessions restore automatically, so returning users never see login or onboarding again.
-- **Cloud sync is not implemented yet.** Signing in, signing out and creating an account never read, change, migrate or upload the local `tapact.tracker.v3` data, and the UI says so.
+- Signing in, signing out and creating an account never change the local `tapact.tracker.v3` data by themselves. Cloud sync (Phase 6B, below) only starts after the user chooses what to do with this device's data.
 - Without `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, the app builds and runs in guest-only mode. Network failures show a calm message and tracking keeps working.
 
 How it fits together:
@@ -101,3 +101,36 @@ How it fits together:
 
 - `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` for Production (and Preview if you want accounts there). These are inlined at build time, so redeploy after changing them.
 - Optional: `NEXT_PUBLIC_SITE_URL=https://tap-act.vercel.app` to force email links to the production domain from any deployment.
+
+## Phase 6B: Offline-first cloud sync
+
+Signed-in users back up activities, goals, archived activities and daily history to Supabase, and see the same data on every device. Guests are unaffected.
+
+**Apply the database migration before deploying:** run `supabase/migrations/20261012220000_tapact_cloud_sync.sql` in the Supabase SQL editor (or `supabase db push`). Until it is applied, Settings shows sync as "Error: Cloud storage for TapAct isn't set up yet" and tracking keeps working locally.
+
+### Data model
+
+The v3 tracker schema is unchanged. Per-day totals alone can't be merged safely (two devices' 30 minutes may be the same 30 minutes), so sync adds the minimum extra metadata beside it:
+
+| Cloud table | Holds | Merge rule |
+| --- | --- | --- |
+| `tapact_activities` | Activity definitions | Newest edit wins (client timestamp, device id tie-break); archiving is sticky |
+| `tapact_time_entries` | Timer segments recorded after sync starts, id `device:activity:start` | Segment end only grows; overlapping segments of one activity are unioned |
+| `tapact_daily_baselines` | Pre-sync per-day totals imported from a device | Immutable; identical totals for the same day/activity count once |
+
+Daily totals on every device are rebuilt from these records, so time is never double-counted across devices, retries, or duplicated uploads. The server triggers enforce the same rules, so a stale or replayed upload can't overwrite newer data. RLS limits every row to `auth.uid()`; only the publishable key is used.
+
+### On the device
+
+- Local bookkeeping lives in `tapact.sync.v1` (device id, which account owns the local data, unconfirmed outbox), `tapact.sync.cache.v1` (pulled rows) and `tapact.sync.stash.v1` (data sets kept aside).
+- Every tracker commit records its exact timer segment and activity edits into the owner's outbox (`lib/sync/capture.ts`). Items leave the outbox only after the server confirms them.
+- Sync runs on sign-in, ~3s after changes, on reconnect, on focus, every 2 minutes while visible, and from **Sync now**, with backoff retries. Web Locks keep one sync at a time across tabs.
+
+### Ownership and account switching
+
+- First sign-in with guest history shows a prompt: **Merge into my account** (with a backup download first), **Keep it on this device only** (sets it aside; nothing uploaded or deleted), or **Decide later** (no sync). An untouched fresh install simply adopts the account.
+- Local data remembers its owner. Signing out keeps it; changes made while signed out sync when that account signs in again.
+- If a different account signs in, the other account's data is never merged into it. Switching sets it aside on the device and brings it back when its owner signs in.
+- Restoring a backup while signed in detaches the local data from the account first, so the file is only uploaded if the user chooses to merge it.
+
+Known limitations: time on different activities at the same moment on two devices is kept for both; day boundaries follow each device's timezone; merging a backup that is already in the account would count it twice (the prompt warns about this).

@@ -16,6 +16,8 @@ export type PersistFailureReason = "quota" | "unavailable";
 
 export type CommitResult = {
   state: TrackerState;
+  /** The latest state the update was applied to (settled to the commit time). */
+  base: TrackerState;
   persisted: boolean;
   failureReason: PersistFailureReason | null;
 };
@@ -90,13 +92,13 @@ export function commitTrackerUpdate(
   const next: TrackerState = { ...update(base, nowMs), revision: base.revision + 1 };
 
   if (!storage) {
-    return { state: next, persisted: false, failureReason: "unavailable" };
+    return { state: next, base, persisted: false, failureReason: "unavailable" };
   }
 
   try {
     storage.setItem(STORAGE_KEY_V3, serializeTrackerState(next));
-    return { state: next, persisted: true, failureReason: null };
+    return { state: next, base, persisted: true, failureReason: null };
   } catch (error) {
-    return { state: next, persisted: false, failureReason: classifyStorageError(error) };
+    return { state: next, base, persisted: false, failureReason: classifyStorageError(error) };
   }
 }
