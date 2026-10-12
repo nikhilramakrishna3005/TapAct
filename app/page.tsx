@@ -21,7 +21,8 @@ import {
   Plus,
   Settings2,
   Sparkles,
-  Timer,
+  PencilLine,
+  Archive,
   X,
 } from "lucide-react";
 import {
@@ -31,41 +32,26 @@ import {
   useMemo,
   useState,
 } from "react";
+import {
+  addActivity,
+  archiveActivity,
+  createActivityId,
+  createDefaultTrackerState,
+  getDayKeyForMs,
+  getDayTotalElapsed,
+  getElapsedByActivityForDay,
+  loadTrackerState,
+  MS_PER_MINUTE,
+  processActiveTimer,
+  serializeTrackerState,
+  STORAGE_KEY_V3,
+  toggleActivity,
+  type Activity,
+  type ActivityIconName,
+  type TrackerState,
+  updateActivity,
+} from "@/lib/tracker";
 
-type ActivityIconName =
-  | "brain"
-  | "dumbbell"
-  | "message"
-  | "book"
-  | "briefcase"
-  | "code"
-  | "languages"
-  | "heart"
-  | "music"
-  | "globe"
-  | "pen"
-  | "palette";
-
-type Activity = {
-  id: string;
-  name: string;
-  iconKey: ActivityIconName;
-  color: string;
-  goalMinutes: number | null;
-  cue: string;
-};
-
-type TrackerState = {
-  dayKey: string;
-  activeActivityId: string | null;
-  activeSinceMs: number | null;
-  elapsedMs: Record<string, number>;
-  activities: Activity[];
-};
-
-const STORAGE_KEY = "tapact.tracker.v2";
-const LEGACY_STORAGE_KEY = "tapact.tracker.v1";
-const MS_PER_MINUTE = 60_000;
 const DEFAULT_ACTIVITY_GOAL = 45;
 const TRACKED_TIME_CAP_MS = 8 * 60 * MS_PER_MINUTE;
 
@@ -94,196 +80,6 @@ const COLOR_OPTIONS = [
   "#9DE582",
   "#B6BFCB",
 ];
-
-const DEFAULT_ACTIVITIES: Activity[] = [
-  {
-    id: "coding",
-    name: "Coding",
-    iconKey: "brain",
-    color: "#8B95FF",
-    goalMinutes: 140,
-    cue: "Deep work sessions",
-  },
-  {
-    id: "gym",
-    name: "Gym",
-    iconKey: "dumbbell",
-    color: "#4FD1A5",
-    goalMinutes: 50,
-    cue: "Strength and cardio",
-  },
-  {
-    id: "communication",
-    name: "Communication",
-    iconKey: "message",
-    color: "#E0A6FF",
-    goalMinutes: 45,
-    cue: "Speaking practice",
-  },
-  {
-    id: "reading",
-    name: "Reading",
-    iconKey: "book",
-    color: "#7EC8F8",
-    goalMinutes: 60,
-    cue: "Focused reading time",
-  },
-];
-
-function getTodayKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function createElapsedSkeleton(activities: Activity[]): Record<string, number> {
-  const elapsed: Record<string, number> = {};
-  for (const activity of activities) {
-    elapsed[activity.id] = 0;
-  }
-  return elapsed;
-}
-
-function createDefaultState(dayKey: string): TrackerState {
-  return {
-    dayKey,
-    activeActivityId: null,
-    activeSinceMs: null,
-    activities: DEFAULT_ACTIVITIES,
-    elapsedMs: createElapsedSkeleton(DEFAULT_ACTIVITIES),
-  };
-}
-
-function isColorHex(value: string): boolean {
-  return /^#[0-9a-fA-F]{6}$/.test(value);
-}
-
-function normalizeActivity(activity: unknown, fallbackIndex: number): Activity | null {
-  if (!activity || typeof activity !== "object") {
-    return null;
-  }
-
-  const candidate = activity as Partial<Activity>;
-  const id =
-    typeof candidate.id === "string" && candidate.id.trim().length > 0
-      ? candidate.id.trim()
-      : `activity-${fallbackIndex + 1}`;
-  const name =
-    typeof candidate.name === "string" && candidate.name.trim().length > 0
-      ? candidate.name.trim().slice(0, 36)
-      : null;
-
-  if (!name) {
-    return null;
-  }
-
-  const iconKey =
-    typeof candidate.iconKey === "string" && candidate.iconKey in ICON_REGISTRY
-      ? (candidate.iconKey as ActivityIconName)
-      : "briefcase";
-
-  const color =
-    typeof candidate.color === "string" && isColorHex(candidate.color)
-      ? candidate.color
-      : "#B6BFCB";
-
-  const goalMinutes =
-    typeof candidate.goalMinutes === "number" &&
-    Number.isFinite(candidate.goalMinutes) &&
-    candidate.goalMinutes > 0 &&
-    candidate.goalMinutes <= 1440
-      ? Math.round(candidate.goalMinutes)
-      : null;
-
-  const cue =
-    typeof candidate.cue === "string" && candidate.cue.trim().length > 0
-      ? candidate.cue.trim().slice(0, 48)
-      : "Custom activity";
-
-  return {
-    id,
-    name,
-    iconKey,
-    color,
-    goalMinutes,
-    cue,
-  };
-}
-
-function normalizeStoredState(value: unknown, nowMs: number): TrackerState {
-  const todayKey = getTodayKey(new Date(nowMs));
-  const fallback = createDefaultState(todayKey);
-
-  if (!value || typeof value !== "object") {
-    return fallback;
-  }
-
-  const candidate = value as Partial<TrackerState> & {
-    activities?: unknown;
-    elapsedMs?: Record<string, unknown>;
-  };
-
-  const parsedActivities = Array.isArray(candidate.activities)
-    ? candidate.activities
-        .map((activity, index) => normalizeActivity(activity, index))
-        .filter((activity): activity is Activity => activity !== null)
-    : [];
-  const activities = parsedActivities.length > 0 ? parsedActivities : fallback.activities;
-  const uniqueIds = new Set<string>();
-  const dedupedActivities: Activity[] = [];
-  for (const activity of activities) {
-    if (uniqueIds.has(activity.id)) {
-      continue;
-    }
-    uniqueIds.add(activity.id);
-    dedupedActivities.push(activity);
-  }
-
-  const elapsedMs = createElapsedSkeleton(dedupedActivities);
-  for (const activity of dedupedActivities) {
-    const rawValue = candidate.elapsedMs?.[activity.id];
-    if (typeof rawValue === "number" && Number.isFinite(rawValue) && rawValue >= 0) {
-      elapsedMs[activity.id] = rawValue;
-    }
-  }
-
-  const dayMatches = candidate.dayKey === todayKey;
-  const activeActivityId =
-    dayMatches &&
-    typeof candidate.activeActivityId === "string" &&
-    uniqueIds.has(candidate.activeActivityId)
-      ? candidate.activeActivityId
-      : null;
-
-  let activeSinceMs: number | null = null;
-  if (
-    activeActivityId &&
-    typeof candidate.activeSinceMs === "number" &&
-    Number.isFinite(candidate.activeSinceMs) &&
-    candidate.activeSinceMs > 0
-  ) {
-    activeSinceMs = Math.min(nowMs, candidate.activeSinceMs);
-  }
-
-  if (!dayMatches) {
-    return {
-      dayKey: todayKey,
-      activeActivityId: null,
-      activeSinceMs: null,
-      activities: dedupedActivities,
-      elapsedMs: createElapsedSkeleton(dedupedActivities),
-    };
-  }
-
-  return {
-    dayKey: todayKey,
-    activeActivityId,
-    activeSinceMs,
-    activities: dedupedActivities,
-    elapsedMs,
-  };
-}
 
 function formatClock(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -397,51 +193,54 @@ function MetricRing({
   );
 }
 
-function createActivityId(name: string): string {
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "")
-    .slice(0, 20);
-  const suffix = Math.random().toString(36).slice(2, 6);
-  return `${slug || "activity"}-${suffix}`;
-}
-
 export default function Home() {
-  const [tracker, setTracker] = useState<TrackerState>(() =>
-    createDefaultState(getTodayKey(new Date())),
-  );
+  const [tracker, setTracker] = useState<TrackerState>(() => createDefaultTrackerState(Date.now()));
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [hydrated, setHydrated] = useState(false);
 
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
+  const [isManageSheetOpen, setIsManageSheetOpen] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftIcon, setDraftIcon] = useState<ActivityIconName>("briefcase");
   const [draftColor, setDraftColor] = useState("#8B95FF");
   const [draftGoal, setDraftGoal] = useState("");
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [editActivityId, setEditActivityId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editIcon, setEditIcon] = useState<ActivityIconName>("briefcase");
+  const [editColor, setEditColor] = useState("#8B95FF");
+  const [editGoal, setEditGoal] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      setNowMs(Date.now());
+      const now = Date.now();
+      setNowMs(now);
+      setTracker((previous) => processActiveTimer(previous, now));
     }, 1000);
     return () => window.clearInterval(intervalId);
   }, []);
 
   useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        const now = Date.now();
+        setNowMs(now);
+        setTracker((previous) => processActiveTimer(previous, now));
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
+  useEffect(() => {
     const now = Date.now();
     try {
-      const nextRaw = window.localStorage.getItem(STORAGE_KEY);
-      const legacyRaw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
-      const source = nextRaw ?? legacyRaw;
-      if (source) {
-        const parsed = JSON.parse(source) as unknown;
-        setTracker(normalizeStoredState(parsed, now));
-      } else {
-        setTracker(createDefaultState(getTodayKey(new Date(now))));
-      }
+      setTracker(loadTrackerState(window.localStorage, now));
     } catch {
-      setTracker(createDefaultState(getTodayKey(new Date(now))));
+      setTracker(createDefaultTrackerState(now));
     } finally {
       setHydrated(true);
       setNowMs(now);
@@ -452,27 +251,11 @@ export default function Home() {
     if (!hydrated) {
       return;
     }
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(tracker));
+    window.localStorage.setItem(STORAGE_KEY_V3, serializeTrackerState(tracker));
   }, [hydrated, tracker]);
 
   useEffect(() => {
-    const today = getTodayKey(new Date(nowMs));
-    setTracker((previous) => {
-      if (previous.dayKey === today) {
-        return previous;
-      }
-      return {
-        ...previous,
-        dayKey: today,
-        activeActivityId: null,
-        activeSinceMs: null,
-        elapsedMs: createElapsedSkeleton(previous.activities),
-      };
-    });
-  }, [nowMs]);
-
-  useEffect(() => {
-    if (!isAddSheetOpen) {
+    if (!isAddSheetOpen && !isManageSheetOpen && !editActivityId) {
       return;
     }
     const previousOverflow = document.body.style.overflow;
@@ -480,30 +263,29 @@ export default function Home() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [isAddSheetOpen]);
+  }, [editActivityId, isAddSheetOpen, isManageSheetOpen]);
 
+  const todayKey = useMemo(() => getDayKeyForMs(nowMs), [nowMs]);
   const elapsedByActivity = useMemo(() => {
-    const elapsed: Record<string, number> = {};
-    for (const activity of tracker.activities) {
-      elapsed[activity.id] = Math.max(0, tracker.elapsedMs[activity.id] ?? 0);
-    }
-    if (tracker.activeActivityId && tracker.activeSinceMs) {
-      const running = Math.max(0, nowMs - tracker.activeSinceMs);
-      elapsed[tracker.activeActivityId] = (elapsed[tracker.activeActivityId] ?? 0) + running;
-    }
-    return elapsed;
-  }, [nowMs, tracker.activities, tracker.activeActivityId, tracker.activeSinceMs, tracker.elapsedMs]);
+    return getElapsedByActivityForDay(tracker, todayKey);
+  }, [todayKey, tracker]);
+
+  const activeActivities = useMemo(
+    () => tracker.activities.filter((activity) => activity.archivedAtMs === null),
+    [tracker.activities],
+  );
+  const archivedActivities = useMemo(
+    () => tracker.activities.filter((activity) => activity.archivedAtMs !== null),
+    [tracker.activities],
+  );
 
   const totalTrackedMs = useMemo(() => {
-    return tracker.activities.reduce(
-      (sum, activity) => sum + (elapsedByActivity[activity.id] ?? 0),
-      0,
-    );
-  }, [elapsedByActivity, tracker.activities]);
+    return getDayTotalElapsed(tracker, todayKey);
+  }, [todayKey, tracker]);
 
   const activitiesWithGoals = useMemo(
-    () => tracker.activities.filter((activity) => activity.goalMinutes && activity.goalMinutes > 0),
-    [tracker.activities],
+    () => activeActivities.filter((activity) => activity.goalMinutes && activity.goalMinutes > 0),
+    [activeActivities],
   );
 
   const goalsCompleted = useMemo(() => {
@@ -535,45 +317,7 @@ export default function Home() {
   const handleActivityTap = useCallback((activityId: string) => {
     const now = Date.now();
     setNowMs(now);
-
-    setTracker((previous) => {
-      const today = getTodayKey(new Date(now));
-      const base =
-        previous.dayKey === today
-          ? previous
-          : {
-              ...previous,
-              dayKey: today,
-              activeActivityId: null,
-              activeSinceMs: null,
-              elapsedMs: createElapsedSkeleton(previous.activities),
-            };
-
-      const elapsedMs = { ...base.elapsedMs };
-      if (base.activeActivityId && base.activeSinceMs) {
-        elapsedMs[base.activeActivityId] =
-          (elapsedMs[base.activeActivityId] ?? 0) + Math.max(0, now - base.activeSinceMs);
-      }
-
-      if (base.activeActivityId === activityId) {
-        return {
-          ...base,
-          elapsedMs,
-          activeActivityId: null,
-          activeSinceMs: null,
-        };
-      }
-
-      return {
-        ...base,
-        elapsedMs: {
-          ...elapsedMs,
-          [activityId]: elapsedMs[activityId] ?? 0,
-        },
-        activeActivityId: activityId,
-        activeSinceMs: now,
-      };
-    });
+    setTracker((previous) => toggleActivity(previous, activityId, now));
   }, []);
 
   const resetAddForm = useCallback(() => {
@@ -588,6 +332,44 @@ export default function Home() {
     setIsAddSheetOpen(false);
     setDraftError(null);
   }, []);
+
+  const closeManageSheet = useCallback(() => {
+    setIsManageSheetOpen(false);
+  }, []);
+
+  const openEditSheet = useCallback((activity: Activity) => {
+    setIsAddSheetOpen(false);
+    setIsManageSheetOpen(false);
+    setEditActivityId(activity.id);
+    setEditName(activity.name);
+    setEditIcon(activity.iconKey);
+    setEditColor(activity.color);
+    setEditGoal(activity.goalMinutes ? String(activity.goalMinutes) : "");
+    setEditError(null);
+  }, []);
+
+  const closeEditSheet = useCallback(() => {
+    setEditActivityId(null);
+    setEditError(null);
+  }, []);
+
+  const handleArchiveActivity = useCallback(
+    (activity: Activity) => {
+      const confirmed = window.confirm(
+        `Archive "${activity.name}"? It will be removed from active tracking, but historical time stays saved.`,
+      );
+      if (!confirmed) {
+        return;
+      }
+      const now = Date.now();
+      setNowMs(now);
+      setTracker((previous) => archiveActivity(previous, activity.id, now));
+      if (editActivityId === activity.id) {
+        closeEditSheet();
+      }
+    },
+    [closeEditSheet, editActivityId],
+  );
 
   const handleAddActivity = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
@@ -610,28 +392,56 @@ export default function Home() {
 
       setTracker((previous) => {
         const id = createActivityId(name);
-        const activity: Activity = {
+        return addActivity(previous, {
           id,
           name: name.slice(0, 36),
           iconKey: draftIcon,
           color: draftColor,
           goalMinutes,
           cue: "Custom activity",
-        };
-        return {
-          ...previous,
-          activities: [...previous.activities, activity],
-          elapsedMs: {
-            ...previous.elapsedMs,
-            [id]: 0,
-          },
-        };
+        });
       });
 
       closeAddSheet();
       resetAddForm();
     },
     [closeAddSheet, draftColor, draftGoal, draftIcon, draftName, resetAddForm],
+  );
+
+  const handleEditActivity = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!editActivityId) {
+        return;
+      }
+
+      const name = editName.trim();
+      if (name.length < 2) {
+        setEditError("Activity name must be at least 2 characters.");
+        return;
+      }
+
+      let goalMinutes: number | null = null;
+      if (editGoal.trim().length > 0) {
+        const parsedGoal = Number(editGoal);
+        if (!Number.isFinite(parsedGoal) || parsedGoal <= 0 || parsedGoal > 1440) {
+          setEditError("Daily goal must be between 1 and 1440 minutes.");
+          return;
+        }
+        goalMinutes = Math.round(parsedGoal);
+      }
+
+      setTracker((previous) =>
+        updateActivity(previous, editActivityId, {
+          name: name.slice(0, 36),
+          iconKey: editIcon,
+          color: editColor,
+          goalMinutes,
+        }),
+      );
+      closeEditSheet();
+    },
+    [closeEditSheet, editActivityId, editColor, editGoal, editIcon, editName],
   );
 
   return (
@@ -705,18 +515,36 @@ export default function Home() {
             <h2 className="text-[1.05rem] font-semibold tracking-tight text-white">
               Today&apos;s Activities
             </h2>
-            <button
-              type="button"
-              onClick={() => setIsAddSheetOpen(true)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/15 bg-[#141b25] px-3 text-sm font-medium text-white transition-colors hover:border-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[#090b10]"
-            >
-              <Plus className="size-4" />
-              Add
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddSheetOpen(false);
+                  closeEditSheet();
+                  setIsManageSheetOpen(true);
+                }}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/15 bg-[#141b25] px-3 text-sm font-medium text-white transition-colors hover:border-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[#090b10]"
+              >
+                <PencilLine className="size-4" />
+                Manage
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsManageSheetOpen(false);
+                  closeEditSheet();
+                  setIsAddSheetOpen(true);
+                }}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/15 bg-[#141b25] px-3 text-sm font-medium text-white transition-colors hover:border-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[#090b10]"
+              >
+                <Plus className="size-4" />
+                Add
+              </button>
+            </div>
           </div>
 
           <div className="mt-3 space-y-3">
-            {tracker.activities.map((activity) => {
+            {activeActivities.map((activity) => {
               const elapsedMs = elapsedByActivity[activity.id] ?? 0;
               const isActive = tracker.activeActivityId === activity.id;
               const statusLabel = isActive ? "Running" : elapsedMs > 0 ? "Paused" : "Ready";
@@ -798,6 +626,12 @@ export default function Home() {
                 </motion.button>
               );
             })}
+
+            {activeActivities.length === 0 && (
+              <div className="rounded-[24px] border border-dashed border-white/15 bg-[#11161e] px-4 py-8 text-center text-sm text-white/60">
+                No active activities. Add one to start tracking.
+              </div>
+            )}
           </div>
         </section>
 
@@ -971,6 +805,251 @@ export default function Home() {
                     className="flex-1 rounded-xl border border-white/10 bg-[#1b2532] px-3 py-2.5 text-sm font-semibold text-white"
                   >
                     Save Activity
+                  </button>
+                </div>
+              </form>
+            </motion.section>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isManageSheetOpen && (
+          <motion.div
+            className="fixed inset-0 z-30 bg-black/65"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={closeManageSheet}
+          >
+            <motion.section
+              role="dialog"
+              aria-modal="true"
+              aria-label="Manage activities"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 280 }}
+              onClick={(event) => event.stopPropagation()}
+              className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[390px] rounded-t-[28px] border border-white/12 bg-[#121823] px-4 pb-5 pt-4 shadow-[0_-20px_44px_-30px_rgba(0,0,0,1)]"
+            >
+              <div className="mx-auto h-1.5 w-11 rounded-full bg-white/20" />
+              <div className="mt-3 flex items-center justify-between">
+                <h3 className="text-lg font-semibold tracking-tight text-white">Manage Activities</h3>
+                <button
+                  type="button"
+                  onClick={closeManageSheet}
+                  className="rounded-full border border-white/15 p-1.5 text-white/70 hover:text-white"
+                  aria-label="Close activity management panel"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              <div className="mt-3 max-h-[62vh] space-y-2 overflow-y-auto pr-1">
+                {activeActivities.map((activity) => {
+                  const Icon = ICON_REGISTRY[activity.iconKey].icon;
+                  return (
+                    <article
+                      key={activity.id}
+                      className="rounded-2xl border border-white/12 bg-[#0f141d] px-3 py-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div
+                            className="rounded-xl border border-white/10 p-2.5"
+                            style={{ color: activity.color, background: "rgba(255,255,255,0.03)" }}
+                          >
+                            <Icon className="size-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-white">{activity.name}</p>
+                            <p className="text-xs text-white/55">
+                              {activity.goalMinutes ? `Goal ${activity.goalMinutes}m` : "No goal"}
+                              {" · "}
+                              {formatSummaryDuration(elapsedByActivity[activity.id] ?? 0)} today
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openEditSheet(activity)}
+                            className="rounded-lg border border-white/15 px-2 py-1.5 text-xs text-white/80"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleArchiveActivity(activity)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-[#ff6d6d55] px-2 py-1.5 text-xs text-[#ffc0c0]"
+                          >
+                            <Archive className="size-3.5" />
+                            Archive
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+
+                {activeActivities.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-white/15 px-3 py-4 text-center text-sm text-white/55">
+                    No active activities to manage.
+                  </p>
+                )}
+
+                {archivedActivities.length > 0 && (
+                  <div className="pt-2">
+                    <p className="mb-2 text-xs uppercase tracking-[0.15em] text-white/50">
+                      Archived
+                    </p>
+                    <div className="space-y-1.5">
+                      {archivedActivities.map((activity) => (
+                        <div
+                          key={activity.id}
+                          className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2"
+                        >
+                          <p className="truncate text-sm text-white/72">{activity.name}</p>
+                          <p className="text-[0.65rem] uppercase tracking-[0.14em] text-white/45">
+                            Preserved
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.section>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {editActivityId && (
+          <motion.div
+            className="fixed inset-0 z-30 bg-black/65"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={closeEditSheet}
+          >
+            <motion.section
+              role="dialog"
+              aria-modal="true"
+              aria-label="Edit activity"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 280 }}
+              onClick={(event) => event.stopPropagation()}
+              className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[390px] rounded-t-[28px] border border-white/12 bg-[#121823] px-4 pb-5 pt-4 shadow-[0_-20px_44px_-30px_rgba(0,0,0,1)]"
+            >
+              <div className="mx-auto h-1.5 w-11 rounded-full bg-white/20" />
+              <div className="mt-3 flex items-center justify-between">
+                <h3 className="text-lg font-semibold tracking-tight text-white">Edit Activity</h3>
+                <button
+                  type="button"
+                  onClick={closeEditSheet}
+                  className="rounded-full border border-white/15 p-1.5 text-white/70 hover:text-white"
+                  aria-label="Close edit activity panel"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              <form className="mt-3 space-y-3" onSubmit={handleEditActivity}>
+                <label className="block">
+                  <span className="mb-1 block text-xs uppercase tracking-[0.15em] text-white/55">
+                    Activity Name
+                  </span>
+                  <input
+                    value={editName}
+                    onChange={(event) => setEditName(event.target.value)}
+                    className="w-full rounded-xl border border-white/12 bg-[#0f141d] px-3 py-2.5 text-sm text-white placeholder:text-white/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                  />
+                </label>
+
+                <div>
+                  <p className="mb-1 text-xs uppercase tracking-[0.15em] text-white/55">Icon</p>
+                  <div className="grid grid-cols-6 gap-2">
+                    {Object.entries(ICON_REGISTRY).map(([key, config]) => {
+                      const isSelected = editIcon === key;
+                      const Icon = config.icon;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setEditIcon(key as ActivityIconName)}
+                          className="rounded-xl border bg-[#0f141d] p-2 transition-colors"
+                          style={{
+                            borderColor: isSelected ? editColor : "rgba(255,255,255,0.12)",
+                            color: isSelected ? editColor : "rgba(255,255,255,0.74)",
+                          }}
+                          aria-label={`Select ${config.label} icon`}
+                        >
+                          <Icon className="mx-auto size-4" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-1 text-xs uppercase tracking-[0.15em] text-white/55">Color</p>
+                  <div className="grid grid-cols-8 gap-2">
+                    {COLOR_OPTIONS.map((color) => {
+                      const selected = color === editColor;
+                      return (
+                        <button
+                          key={color}
+                          type="button"
+                          aria-label={`Select ${color} accent`}
+                          onClick={() => setEditColor(color)}
+                          className="grid place-items-center rounded-full border p-[3px]"
+                          style={{
+                            borderColor: selected ? "white" : "rgba(255,255,255,0.14)",
+                          }}
+                        >
+                          <span
+                            className="block size-5 rounded-full"
+                            style={{ backgroundColor: color }}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs uppercase tracking-[0.15em] text-white/55">
+                    Daily Goal (minutes, optional)
+                  </span>
+                  <input
+                    value={editGoal}
+                    onChange={(event) => setEditGoal(event.target.value)}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="30"
+                    className="w-full rounded-xl border border-white/12 bg-[#0f141d] px-3 py-2.5 text-sm text-white placeholder:text-white/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                  />
+                </label>
+
+                {editError && <p className="text-xs text-[#FFB4B4]">{editError}</p>}
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={closeEditSheet}
+                    className="flex-1 rounded-xl border border-white/15 bg-transparent px-3 py-2.5 text-sm font-medium text-white/85"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 rounded-xl border border-white/10 bg-[#1b2532] px-3 py-2.5 text-sm font-semibold text-white"
+                  >
+                    Save Changes
                   </button>
                 </div>
               </form>
