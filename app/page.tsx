@@ -46,6 +46,7 @@ import {
 } from "@/lib/trackerStore";
 import { HistoryView } from "./components/HistoryView";
 import { InsightsView } from "./components/InsightsView";
+import { SettingsView } from "./components/SettingsView";
 import {
   clampRatio,
   formatClock,
@@ -66,12 +67,13 @@ function getBrowserStorage(): WritableStorageLike | null {
 const DEFAULT_ACTIVITY_GOAL = 45;
 const TRACKED_TIME_CAP_MS = 8 * 60 * MS_PER_MINUTE;
 
-type Tab = "home" | "insights" | "history";
+type Tab = "home" | "insights" | "history" | "settings";
 
 const NAV_ITEMS = [
   { id: "home", label: "Home", icon: House },
   { id: "insights", label: "Insights", icon: LineChart },
   { id: "history", label: "History", icon: CheckCircle2 },
+  { id: "settings", label: "Settings", icon: Settings2 },
 ] as const;
 
 const COLOR_OPTIONS = [
@@ -140,6 +142,7 @@ export default function Home() {
     setTracker(result.state);
     setNowMs(now);
     setPersistFailure(result.failureReason);
+    return result;
   }, []);
 
   const syncWithOtherTabs = useCallback(() => {
@@ -376,7 +379,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#090b10] text-[#edf2f7]">
-      <main className="mx-auto w-full max-w-[390px] px-4 pb-[122px] pt-3">
+      <main className="mx-auto w-full max-w-[390px] px-4 pb-[calc(122px+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))]">
         <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={tab}
@@ -389,6 +392,13 @@ export default function Home() {
           <InsightsView tracker={liveTracker} todayKey={todayKey} />
         ) : tab === "history" ? (
           <HistoryView tracker={liveTracker} todayKey={todayKey} />
+        ) : tab === "settings" ? (
+          <SettingsView
+            tracker={tracker}
+            commit={commit}
+            getStorage={getBrowserStorage}
+            persistFailure={persistFailure}
+          />
         ) : (
         <>
         <header className="rounded-[28px] border border-white/10 bg-[#11161e] px-4 py-4 shadow-[0_18px_50px_-34px_rgba(0,0,0,1)]">
@@ -600,7 +610,7 @@ export default function Home() {
         )}
       </main>
 
-      <nav className="pointer-events-none fixed inset-x-0 bottom-4 z-20">
+      <nav aria-label="Primary" className="pointer-events-none fixed inset-x-0 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-20">
         <div className="pointer-events-auto mx-auto grid w-[calc(100%-24px)] max-w-[360px] grid-cols-4 items-center gap-1 rounded-2xl border border-white/12 bg-[#0f141d]/95 px-2 py-2 shadow-[0_20px_40px_-28px_rgba(0,0,0,1)] backdrop-blur">
           {NAV_ITEMS.map((item) => {
             const NavIcon = item.icon;
@@ -640,15 +650,6 @@ export default function Home() {
               </button>
             );
           })}
-          <button
-            type="button"
-            disabled
-            className="rounded-xl px-1.5 py-1.5 text-center disabled:cursor-not-allowed"
-          >
-            <Settings2 className="mx-auto size-4 text-white/45" />
-            <p className="mt-1 text-[0.64rem] font-medium tracking-[0.03em] text-white/55">Settings</p>
-            <p className="text-[0.54rem] uppercase tracking-[0.14em] text-white/45">Soon</p>
-          </button>
         </div>
       </nav>
 
@@ -670,7 +671,7 @@ export default function Home() {
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 28, stiffness: 280 }}
               onClick={(event) => event.stopPropagation()}
-              className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[390px] rounded-t-[28px] border border-white/12 bg-[#121823] px-4 pb-5 pt-4 shadow-[0_-20px_44px_-30px_rgba(0,0,0,1)]"
+              className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[390px] rounded-t-[28px] border border-white/12 bg-[#121823] px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-4 shadow-[0_-20px_44px_-30px_rgba(0,0,0,1)]"
             >
               <div className="mx-auto h-1.5 w-11 rounded-full bg-white/20" />
               <div className="mt-3 flex items-center justify-between">
@@ -807,7 +808,7 @@ export default function Home() {
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 28, stiffness: 280 }}
               onClick={(event) => event.stopPropagation()}
-              className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[390px] rounded-t-[28px] border border-white/12 bg-[#121823] px-4 pb-5 pt-4 shadow-[0_-20px_44px_-30px_rgba(0,0,0,1)]"
+              className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[390px] rounded-t-[28px] border border-white/12 bg-[#121823] px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-4 shadow-[0_-20px_44px_-30px_rgba(0,0,0,1)]"
             >
               <div className="mx-auto h-1.5 w-11 rounded-full bg-white/20" />
               <div className="mt-3 flex items-center justify-between">
@@ -919,7 +920,7 @@ export default function Home() {
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 28, stiffness: 280 }}
               onClick={(event) => event.stopPropagation()}
-              className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[390px] rounded-t-[28px] border border-white/12 bg-[#121823] px-4 pb-5 pt-4 shadow-[0_-20px_44px_-30px_rgba(0,0,0,1)]"
+              className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[390px] rounded-t-[28px] border border-white/12 bg-[#121823] px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-4 shadow-[0_-20px_44px_-30px_rgba(0,0,0,1)]"
             >
               <div className="mx-auto h-1.5 w-11 rounded-full bg-white/20" />
               <div className="mt-3 flex items-center justify-between">
