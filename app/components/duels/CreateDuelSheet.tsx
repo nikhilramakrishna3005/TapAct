@@ -35,6 +35,7 @@ export function CreateDuelSheet({
   const [busy, setBusy] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
+  const [picking, setPicking] = useState<number | null>(null);
 
   const resolvedTitle = title.trim() || suggestDuelTitle(durationDays, activities[0]?.name ?? "");
   const activeActivities = tracker.activities.filter((activity) => activity.archivedAtMs === null);
@@ -159,24 +160,42 @@ export function CreateDuelSheet({
                     aria-label={`Activity ${index + 1} daily minutes`}
                   />
                 </div>
-                <label className="mt-2 block text-xs text-text-3">
-                  Your tracked activity
-                  <select
-                    value={activity.trackerActivityId ?? ""}
-                    onChange={(event) => useExisting(index, activeActivities.find((item) => item.id === event.target.value) ?? null)}
-                    className="field mt-1"
-                  >
-                    <option value="">Map later</option>
+                {activity.trackerActivityId ? (
+                  <p className="mt-2 text-xs text-mint">
+                    On your Today list
+                    <button type="button" onClick={() => updateActivity(index, { trackerActivityId: null })} className="ml-2 font-medium text-text-3">
+                      Change
+                    </button>
+                  </p>
+                ) : (
+                  <div className="mt-2 flex gap-2">
+                    <button type="button" onClick={() => setPicking(picking === index ? null : index)} className="btn btn-ghost h-10 flex-1 text-xs">
+                      Use existing
+                    </button>
+                    <button type="button" onClick={() => createMatching(index)} className="btn btn-ghost h-10 flex-1 text-xs">
+                      Add to Today
+                    </button>
+                  </div>
+                )}
+                {picking === index && !activity.trackerActivityId && (
+                  <ul className="mt-2 space-y-1">
+                    {activeActivities.length === 0 && <li className="text-xs text-text-3">You don't have an activity yet. Add one to Today.</li>}
                     {activeActivities.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name}
-                      </option>
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            useExisting(index, item);
+                            setPicking(null);
+                          }}
+                          className="min-h-11 w-full rounded-xl px-3 text-left text-sm text-text-1 hover:bg-white/5"
+                        >
+                          {item.name}
+                        </button>
+                      </li>
                     ))}
-                  </select>
-                </label>
-                <button type="button" onClick={() => createMatching(index)} className="mt-2 text-xs font-medium text-volt-hi">
-                  Create a matching activity
-                </button>
+                  </ul>
+                )}
               </div>
             ))}
             {activities.length < 3 && (

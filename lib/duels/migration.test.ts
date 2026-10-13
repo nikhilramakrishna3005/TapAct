@@ -23,6 +23,23 @@ describe("duel migration authorization", () => {
     expect(sql).not.toMatch(/grant (insert|update|delete|select) on public\.tapact_duel/i);
   });
 
+  it("lets only the pending creator change shared activities", () => {
+    const rules = readFileSync(resolve(process.cwd(), "supabase/migrations/20261013150000_tapact_duel_rules.sql"), "utf8");
+    expect(rules).toContain("d.status <> 'pending'");
+    expect(rules).toContain("d.creator_id is distinct from uid");
+    expect(rules).toContain("for update");
+    expect(rules).toContain("set name = v_activity_name, target_minutes = v_target_minutes, sort_order = v_sort_order");
+    expect(rules).toContain("values (p_duel, v_activity_name, v_target_minutes, v_sort_order)");
+    expect(rules).not.toMatch(/set name = name\b/);
+    expect(rules).toContain("array['duel_id', 'sort_order']");
+    expect(rules).toContain("into strict cname");
+    expect(rules).not.toMatch(/for cname in/);
+    expect(rules).not.toContain("tapact_duel_member_score");
+    expect(rules).not.toContain("tapact_duel_timer_minutes");
+    expect(rules).not.toMatch(/grant (insert|update|delete|select) on public\.tapact_duel/i);
+    expect(rules).toContain("grant execute on function public.tapact_set_duel_rules(uuid, jsonb) to authenticated");
+  });
+
   it("stores invite tokens only as hashes and scores timer sessions", () => {
     expect(sql).toContain("token_hash");
     expect(sql).not.toMatch(/token text not null/);
