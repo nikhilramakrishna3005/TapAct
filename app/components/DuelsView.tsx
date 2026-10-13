@@ -258,6 +258,14 @@ function DuelBoardView({
             {board.duel.awaitingOpponent ? "Waiting for your friend" : `You vs ${board.friend?.name ?? "Friend"}`}
             {dayNumber >= 0 ? ` · Day ${dayNumber + 1} of ${board.duel.durationDays}` : ""}
           </p>
+          {board.duel.awaitingOpponent && (
+            <p className="mt-2 text-xs text-text-3">Points start once your friend accepts. Tracking before then does not count.</p>
+          )}
+          {board.duel.plannedStartsOn !== board.duel.startsOn && (
+            <p className="mt-2 text-xs text-text-2">
+              Start moved from {board.duel.plannedStartsOn} to {board.duel.startsOn}. Both of you begin that day, for {board.duel.durationDays} days. Time tracked before {board.duel.startsOn} does not count.
+            </p>
+          )}
         </div>
         <button type="button" onClick={onClose} className="text-xs font-medium text-text-3">Close</button>
       </div>

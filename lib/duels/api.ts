@@ -23,6 +23,7 @@ export type DuelBoard = {
     title: string;
     durationDays: number;
     startsOn: string;
+    plannedStartsOn: string;
     status: string;
     final: boolean;
     winner: "you" | "friend" | "tie" | null;

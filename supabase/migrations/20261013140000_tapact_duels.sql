@@ -7,6 +7,10 @@
 -- entry, which drops that time out of the duel.
 -- Each member's days use the IANA time zone stored when they joined. Changing the
 -- device time zone later does not move those days. Nothing before starts_on counts.
+-- starts_on stays on the creator's chosen date when the invite is accepted before
+-- that day begins in both saved time zones. A later acceptance moves both players
+-- to the next calendar date that has not started for either of them. Pending duels
+-- score nothing, so tracking before both people have joined cannot earn points.
 -- Overlapping timer intervals for the same activity are merged before scoring.
 -- Invite tokens are stored only as SHA-256 hashes. Accept/revoke/leave run as
 -- security definer functions so membership limits can't be bypassed from the client.
@@ -19,6 +23,7 @@ create table if not exists public.tapact_duels (
   title text not null check (char_length(title) between 2 and 48),
   duration_days integer not null check (duration_days in (7, 14, 30)),
   starts_on date not null,
+  planned_starts_on date not null,
   status text not null default 'pending' check (status in ('pending', 'active', 'completed', 'cancelled')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -144,6 +149,31 @@ as $$
     select 1 from public.tapact_duel_members m
     where m.duel_id = duel and m.user_id = (select auth.uid())
   );
+$$;
+
+-- First scoring date shared by both players. See the header note.
+create or replace function public.tapact_duel_official_start(
+  planned date,
+  accepted_at timestamptz,
+  creator_zone text,
+  friend_zone text
+)
+returns date
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  creator_today date := (accepted_at at time zone creator_zone)::date;
+  friend_today date := (accepted_at at time zone friend_zone)::date;
+begin
+  if accepted_at < (planned::timestamp at time zone creator_zone)
+     and accepted_at < (planned::timestamp at time zone friend_zone) then
+    return planned;
+  end if;
+  return greatest(creator_today + 1, friend_today + 1);
+end;
 $$;
 
 -- Timer minutes per agreed calendar day, in the member's frozen time zone.
@@ -281,9 +311,13 @@ begin
       where a.duel_id = p_duel
       order by a.sort_order
     loop
-      totals := public.tapact_duel_timer_minutes(
-        p_user, act.tracker_activity_id, m.time_zone, d.starts_on, d.starts_on + d.duration_days, m.left_at
-      );
+      if d.status = 'pending' then
+        totals := '{}'::jsonb;
+      else
+        totals := public.tapact_duel_timer_minutes(
+          p_user, act.tracker_activity_id, m.time_zone, d.starts_on, d.starts_on + d.duration_days, m.left_at
+        );
+      end if;
       tracked := floor(coalesce((totals ->> day::text)::bigint, 0) / 60000.0);
       target := act.target_minutes;
       met := act.tracker_activity_id is not null and tracked >= target;
@@ -360,8 +394,8 @@ begin
     raise exception 'You already have 20 open duels.';
   end if;
 
-  insert into public.tapact_duels (creator_id, title, duration_days, starts_on)
-  values (uid, title, duration, starts)
+  insert into public.tapact_duels (creator_id, title, duration_days, starts_on, planned_starts_on)
+  values (uid, title, duration, starts, starts)
   returning id into duel;
 
   insert into public.tapact_duel_members (duel_id, user_id, display_name, time_zone)
@@ -444,7 +478,8 @@ begin
       'Time past a target does not add points.',
       'Only timer-recorded time counts. Sessions added or edited by hand stay in History and do not score.',
       'Days use the time zone saved when you join, even if your phone time zone changes later.',
-      'Nothing before the start date counts.'
+      'Nothing before the start date counts.',
+      'If you accept after that date has started in either time zone, both players move to the next full day. Time before then does not score.'
     )
   );
 end;
@@ -461,6 +496,8 @@ declare
   inv public.tapact_duel_invites%rowtype;
   d public.tapact_duels%rowtype;
   members int;
+  creator_zone text;
+  official date;
 begin
   if uid is null then
     raise exception 'Sign in to respond to this invite.';
@@ -500,6 +537,12 @@ begin
     raise exception 'This duel has already ended.';
   end if;
 
+  select time_zone into creator_zone
+  from public.tapact_duel_members
+  where duel_id = d.id and user_id = d.creator_id;
+
+  official := public.tapact_duel_official_start(d.planned_starts_on, now(), creator_zone, zone);
+
   insert into public.tapact_duel_members (duel_id, user_id, display_name, time_zone)
   values (d.id, uid, public.tapact_duel_display_name(uid), zone);
 
@@ -508,10 +551,14 @@ begin
   where id = inv.id;
 
   update public.tapact_duels
-  set status = 'active', updated_at = now()
+  set starts_on = official, status = 'active', updated_at = now()
   where id = d.id;
 
-  return jsonb_build_object('duelId', d.id);
+  return jsonb_build_object(
+    'duelId', d.id,
+    'startsOn', official,
+    'plannedStartsOn', d.planned_starts_on
+  );
 end;
 $$;
 
@@ -833,6 +880,7 @@ begin
   return jsonb_build_object(
     'duel', jsonb_build_object(
       'id', d.id, 'title', d.title, 'durationDays', d.duration_days, 'startsOn', d.starts_on,
+      'plannedStartsOn', d.planned_starts_on,
       'status', d.status, 'final', final, 'winner', winner, 'awaitingOpponent', friend.user_id is null and d.status = 'pending'
     ),
     'activities', coalesce((
@@ -940,6 +988,7 @@ create policy "Members read shared presence" on public.tapact_duel_presence
 
 revoke all on function public.tapact_duel_is_member(uuid) from public, anon;
 grant execute on function public.tapact_duel_is_member(uuid) to authenticated;
+revoke all on function public.tapact_duel_official_start(date, timestamptz, text, text) from public, anon, authenticated;
 revoke all on function public.tapact_duel_display_name(uuid) from public, anon, authenticated;
 revoke all on function public.tapact_duel_zone_ok(text) from public, anon, authenticated;
 revoke all on function public.tapact_duel_token_hash(text) from public, anon, authenticated;

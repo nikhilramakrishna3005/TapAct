@@ -78,6 +78,22 @@ export function challengeDayKeys(startsOn: string, durationDays: number): string
   return Array.from({ length: durationDays }, (_, index) => addCalendarDays(startsOn, index));
 }
 
+/**
+ * Shared first scoring date. The creator's date is kept when acceptance is still
+ * before that day begins in every participant's zone. Otherwise both players
+ * start on the next calendar date that has not begun for either of them, so
+ * time tracked before both have joined cannot score.
+ */
+export function officialStartDate(plannedStartsOn: string, acceptedAtMs: number, zones: string[]): string {
+  if (zones.length === 0) return plannedStartsOn;
+  const stillAhead = zones.every((zone) => acceptedAtMs < startOfZonedDay(plannedStartsOn, zone));
+  if (stillAhead) return plannedStartsOn;
+  return zones.reduce((latest, zone) => {
+    const next = addCalendarDays(zonedDayKey(acceptedAtMs, zone), 1);
+    return next > latest ? next : latest;
+  }, "0000-00-00");
+}
+
 function splitZoned(startMs: number, endMs: number, timeZone: string): { dayKey: string; ms: number }[] {
   const spans: { dayKey: string; ms: number }[] = [];
   let cursor = startMs;

@@ -199,7 +199,7 @@ export function CreateDuelSheet({
               <li key={activity.name}>{activity.name}: {activity.targetMinutes} min / day</li>
             ))}
           </ul>
-          <p>Only timer-recorded time counts. Sessions you add or edit by hand stay in History and do not score. Days stay in {deviceTimeZone()}, even if your phone time zone changes. Nothing before the start date counts.</p>
+          <p>Only timer-recorded time counts. Sessions you add or edit by hand stay in History and do not score. Days stay in {deviceTimeZone()}, even if your phone time zone changes. Nothing before the start date counts. If your friend accepts after that date has started in either time zone, you both move to the next full day, and earlier tracking does not score.</p>
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={() => setStep("setup")} className="btn btn-ghost h-12 flex-1">Back</button>
