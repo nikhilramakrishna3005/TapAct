@@ -9,7 +9,9 @@ import { consistencyStreak, dayPhase, type DayPhase } from "@/lib/duels/streak";
 import { addActivity, createActivityId, toggleActivity, type TrackerState } from "@/lib/tracker";
 import type { TrackerUpdate } from "@/lib/trackerStore";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { archetypeOf, type DuelCharacterPublic } from "@/lib/duels/character";
 import { BattleShowcase } from "./BattleShowcase";
+import { CharacterPortrait } from "./CharacterPortrait";
 import { ManageActivitiesSheet, ProposalCard } from "./ManageActivitiesSheet";
 import { Sheet } from "../ui";
 
@@ -34,6 +36,8 @@ export function DuelArena({
   onNote,
   onAct,
   onClose,
+  onChangeCharacter,
+  onCustomizeCharacter,
 }: {
   board: DuelBoard;
   tracker: TrackerState;
@@ -46,6 +50,8 @@ export function DuelArena({
   onNote: (note: string | null) => void;
   onAct: (work: () => Promise<void>, note?: string) => Promise<void>;
   onClose: () => void;
+  onChangeCharacter: () => void;
+  onCustomizeCharacter: () => void;
 }) {
   const todayKey = board.you.todayKey;
   const inRange = board.youDays.some((day) => day.dayKey === todayKey);
@@ -124,7 +130,7 @@ export function DuelArena({
         )}
 
         <div className="mt-3 grid grid-cols-[minmax(0,1fr)_2.25rem_minmax(0,1fr)] items-stretch gap-1">
-          <PlayerPanel name={board.you.name} score={board.you.score} streak={youStreak} leading={lead === "you"} live={null} />
+          <PlayerPanel name={board.you.name} score={board.you.score} streak={youStreak} leading={lead === "you"} live={null} character={board.you.character} />
           <div className="flex flex-col items-center justify-center">
             <p className="text-[0.65rem] font-semibold tracking-[0.16em] text-text-3">VS</p>
             <p className={`mt-1 text-center text-[0.6rem] font-medium leading-tight ${lead === "tie" || lead === "waiting" ? "text-text-3" : lead === "you" ? "text-volt-hi" : "text-ice"}`}>
@@ -136,6 +142,7 @@ export function DuelArena({
             score={board.friend?.score ?? 0}
             streak={board.friend ? friendStreak : 0}
             leading={lead === "friend"}
+            character={board.friend?.character ?? null}
             live={
               board.friend?.status === "left"
                 ? "Left the duel"
@@ -263,6 +270,26 @@ export function DuelArena({
       <details className="mt-4 rounded-[18px] border border-line bg-ink-1 px-3 py-2">
         <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-text-1">Duel settings</summary>
         <div className="space-y-3 pb-2 text-sm text-text-2">
+          <div>
+            <p className="eyebrow">Your character</p>
+            <div className="mt-2 flex items-center gap-3">
+              <CharacterPortrait character={board.you.character} name={board.you.name} size="md" className="mx-0" />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-text-1">{board.you.character?.title ?? "No character yet"}</p>
+                <p className="truncate text-xs text-text-3">
+                  {board.you.character ? `${archetypeOf(board.you.character.archetype)?.name ?? "Character"} · cosmetic only` : "Choose a character to show in the arena."}
+                </p>
+              </div>
+            </div>
+            <div className="mt-2 flex gap-2">
+              <button type="button" onClick={onChangeCharacter} className="min-h-11 text-xs font-semibold text-volt-hi">
+                Change character
+              </button>
+              <button type="button" onClick={onCustomizeCharacter} className="min-h-11 text-xs font-semibold text-volt-hi">
+                Customize
+              </button>
+            </div>
+          </div>
           <div>
             <p className="eyebrow">Activity connections</p>
             <ul className="mt-2 space-y-2">
@@ -398,13 +425,26 @@ export function DuelArena({
   );
 }
 
-function PlayerPanel({ name, score, streak, leading, live }: { name: string; score: number; streak: number; leading: boolean; live: string | null }) {
+function PlayerPanel({
+  name,
+  score,
+  streak,
+  leading,
+  live,
+  character,
+}: {
+  name: string;
+  score: number;
+  streak: number;
+  leading: boolean;
+  live: string | null;
+  character: DuelCharacterPublic | null;
+}) {
   return (
     <div className={`min-w-0 rounded-[18px] border px-2 py-2 text-center ${leading ? "border-volt/40 bg-volt/[0.06]" : "border-line bg-ink-0"}`}>
-      <div className="mx-auto grid size-12 place-items-center rounded-[16px] border border-white/10 bg-[linear-gradient(160deg,rgba(142,123,255,0.2),rgba(95,227,255,0.08))] text-sm font-semibold text-text-1" aria-hidden>
-        {initials(name)}
-      </div>
+      <CharacterPortrait character={character} name={name} size="md" />
       <p className="mt-1 truncate text-xs font-semibold text-text-1">{name}</p>
+      <p className="truncate text-[0.62rem] text-text-3">{character?.title ?? "Ready to appear"}</p>
       <p className="numeric text-2xl font-semibold leading-none text-text-1">{score}</p>
       <p className="mt-1 text-[0.65rem] text-text-3">{streak > 0 ? `${streak}-day streak` : "No streak yet"}</p>
       {live && <p className="mt-1 truncate text-[0.65rem] text-ice">{live}</p>}
@@ -443,12 +483,6 @@ function BattleBar({
       <p className="mt-1 text-[0.65rem] text-text-3">{minutes}/{target} min</p>
     </div>
   );
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).slice(0, 2);
-  const mark = parts.map((part) => part[0]?.toUpperCase() ?? "").join("");
-  return mark || "•";
 }
 
 function phaseTile(phase: DayPhase): string {

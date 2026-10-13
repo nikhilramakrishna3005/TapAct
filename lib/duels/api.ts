@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { asPublicCharacter, type DuelCharacterPublic } from "./character";
 import { zonedDayKey } from "./score";
 
 export type DuelListItem = {
@@ -52,9 +53,10 @@ export type DuelBoard = {
     muted: boolean;
     creator?: boolean;
     todayKey: string;
+    character: DuelCharacterPublic | null;
     mappings: { challengeActivityId: string; trackerActivityId: string }[];
   };
-  friend: { name: string; score: number; status: string } | null;
+  friend: { name: string; score: number; status: string; character: DuelCharacterPublic | null } | null;
   youDays: BoardDay[];
   friendDays: BoardDay[];
   presence: { name: string; activity: string; activityId: string } | null;
@@ -111,12 +113,34 @@ function asListItem(raw: DuelListItem): DuelListItem {
   };
 }
 
+function asBoard(raw: DuelBoard): DuelBoard {
+  return {
+    ...raw,
+    you: {
+      ...raw.you,
+      character: asPublicCharacter(raw.you?.character),
+    },
+    friend: raw.friend
+      ? {
+          ...raw.friend,
+          character: asPublicCharacter(raw.friend.character),
+        }
+      : null,
+  };
+}
+
 export const duelsApi = {
   list: async (client: SupabaseClient) => {
     const rows = await call<DuelListItem[]>(client, "tapact_list_duels", {});
     return (Array.isArray(rows) ? rows : []).map(asListItem);
   },
-  board: (client: SupabaseClient, duelId: string) => call<DuelBoard>(client, "tapact_duel_board", { p_duel: duelId }),
+  board: async (client: SupabaseClient, duelId: string) => asBoard(await call<DuelBoard>(client, "tapact_duel_board", { p_duel: duelId })),
+  character: async (client: SupabaseClient) => asPublicCharacter(await call<unknown>(client, "tapact_get_duel_character", {})),
+  setCharacter: async (client: SupabaseClient, character: DuelCharacterPublic) => {
+    const saved = asPublicCharacter(await call<unknown>(client, "tapact_set_duel_character", { payload: character }));
+    if (!saved) throw new Error("Couldn't save that character. Try again.");
+    return saved;
+  },
   create: (client: SupabaseClient, payload: unknown) => call<{ duelId: string; token: string }>(client, "tapact_create_duel", { payload }),
   preview: (client: SupabaseClient, token: string) => call<InvitePreview>(client, "tapact_preview_duel_invite", { token }),
   accept: (client: SupabaseClient, token: string, zone: string) => call<{ duelId: string }>(client, "tapact_accept_duel_invite", { token, zone }),
