@@ -4,22 +4,32 @@
 
 begin;
 
--- Allow one statement to reorder sort slots. The check still keeps values in 0..2.
+-- Replace only UNIQUE (duel_id, sort_order) so a reorder can commit in one transaction.
+-- Primary keys, foreign keys, checks, and any other unique constraint stay in place.
 do $$
 declare
   cname text;
 begin
-  for cname in
-    select con.conname
-    from pg_constraint con
-    join pg_class rel on rel.oid = con.conrelid
-    join pg_namespace nsp on nsp.oid = rel.relnamespace
-    where nsp.nspname = 'public'
-      and rel.relname = 'tapact_duel_activities'
-      and con.contype = 'u'
-  loop
-    execute format('alter table public.tapact_duel_activities drop constraint %I', cname);
-  end loop;
+  select con.conname into strict cname
+  from pg_constraint con
+  join pg_class rel on rel.oid = con.conrelid
+  join pg_namespace nsp on nsp.oid = rel.relnamespace
+  where nsp.nspname = 'public'
+    and rel.relname = 'tapact_duel_activities'
+    and con.contype = 'u'
+    and (
+      select array_agg(att.attname::text order by att.attname)
+      from unnest(con.conkey) with ordinality as cols(attnum, ord)
+      join pg_attribute att
+        on att.attrelid = con.conrelid
+       and att.attnum = cols.attnum
+       and not att.attisdropped
+    ) = array['duel_id', 'sort_order']::text[];
+
+  execute format('alter table public.tapact_duel_activities drop constraint %I', cname);
+exception
+  when no_data_found or too_many_rows then
+    raise exception 'Expected exactly one unique (duel_id, sort_order) on tapact_duel_activities.';
 end $$;
 
 alter table public.tapact_duel_activities
@@ -36,12 +46,12 @@ declare
   uid uuid := auth.uid();
   d public.tapact_duels%rowtype;
   item record;
-  idx int := 0;
   kept uuid[] := '{}';
   seen uuid[] := '{}';
   act_id uuid;
-  name text;
-  target int;
+  v_activity_name text;
+  v_target_minutes int;
+  v_sort_order int := 0;
   raw_id text;
 begin
   if uid is null then
@@ -60,10 +70,10 @@ begin
 
   for item in select value as spec from jsonb_array_elements(payload -> 'activities')
   loop
-    name := btrim(coalesce(item.spec ->> 'name', ''));
-    target := (item.spec ->> 'targetMinutes')::int;
+    v_activity_name := btrim(coalesce(item.spec ->> 'name', ''));
+    v_target_minutes := (item.spec ->> 'targetMinutes')::int;
     raw_id := nullif(btrim(coalesce(item.spec ->> 'id', '')), '');
-    if char_length(name) < 2 or char_length(name) > 36 or target is null or target < 5 or target > 240 then
+    if char_length(v_activity_name) < 2 or char_length(v_activity_name) > 36 or v_target_minutes is null or v_target_minutes < 5 or v_target_minutes > 240 then
       raise exception 'Each activity needs a name and a target of 5–240 minutes.';
     end if;
     if raw_id is not null then
@@ -87,21 +97,21 @@ begin
 
   for item in select value as spec from jsonb_array_elements(payload -> 'activities')
   loop
-    name := btrim(item.spec ->> 'name');
-    target := (item.spec ->> 'targetMinutes')::int;
+    v_activity_name := btrim(item.spec ->> 'name');
+    v_target_minutes := (item.spec ->> 'targetMinutes')::int;
     raw_id := nullif(btrim(coalesce(item.spec ->> 'id', '')), '');
     if raw_id is not null then
       act_id := raw_id::uuid;
       update public.tapact_duel_activities
-      set name = name, target_minutes = target, sort_order = idx
+      set name = v_activity_name, target_minutes = v_target_minutes, sort_order = v_sort_order
       where id = act_id and duel_id = p_duel;
     else
       insert into public.tapact_duel_activities (duel_id, name, target_minutes, sort_order)
-      values (p_duel, name, target, idx)
+      values (p_duel, v_activity_name, v_target_minutes, v_sort_order)
       returning id into act_id;
     end if;
     kept := kept || act_id;
-    idx := idx + 1;
+    v_sort_order := v_sort_order + 1;
   end loop;
 
   delete from public.tapact_duel_activities
