@@ -4,6 +4,8 @@ import {
   alreadyResolvedDuelAction,
   appendActivityDraft,
   archivedDuelAction,
+  archivedDuelLabel,
+  canArchiveDuel,
   canRemoveSharedActivity,
   canRestoreDuel,
   draftWithoutActivity,
@@ -14,6 +16,7 @@ import {
   partitionDuelLists,
   removeActivityCopy,
   replaceActivityDraft,
+  reviewArchiveRequest,
 } from "./manage";
 
 function item(partial: Partial<DuelListItem> & Pick<DuelListItem, "id" | "status">): DuelListItem {
@@ -56,7 +59,7 @@ describe("duel list management", () => {
     expect(duelMenuAction(item({ id: "p", status: "pending", creator: true }))).toBe("cancel");
     expect(duelMenuAction(item({ id: "p", status: "pending", creator: false }))).toBeNull();
     expect(duelMenuAction(item({ id: "a", status: "active" }))).toBe("leave");
-    expect(duelMenuAction(item({ id: "a", status: "active", memberStatus: "left" }))).toBeNull();
+    expect(duelMenuAction(item({ id: "a", status: "active", memberStatus: "left" }))).toBe("archive");
     expect(duelMenuAction(item({ id: "c", status: "completed" }))).toBe("archive");
     expect(duelMenuAction(item({ id: "x", status: "cancelled" }))).toBe("archive");
     expect(duelMenuAction(item({ id: "h", status: "completed", archived: true }))).toBeNull();
@@ -70,6 +73,46 @@ describe("duel list management", () => {
     expect(duelActionCopy("leave", "Focus week").body).toMatch(/live activity status/);
     expect(duelActionCopy("archive", "Focus week").body).toMatch(/only for you/);
     expect(duelActionCopy("cancel", "Focus week").body).not.toMatch(/Leave duel/);
+  });
+
+  it("lets a member who already left an active duel archive and later restore it", () => {
+    const left = item({ id: "left", status: "active", memberStatus: "left" });
+    const hidden = item({ id: "left", status: "active", memberStatus: "left", archived: true });
+    expect(canArchiveDuel(left)).toBe(true);
+    expect(canArchiveDuel(item({ id: "a", status: "active" }))).toBe(false);
+    expect(duelMenuAction(left)).toBe("archive");
+    expect(isMainListDuel(left)).toBe(true);
+    expect(isMainListDuel(hidden)).toBe(false);
+    expect(isArchivedDuel(hidden)).toBe(true);
+    expect(archivedDuelAction(hidden)).toBe("restore");
+    expect(archivedDuelLabel(left)).toBe("Left");
+    expect(canRestoreDuel(hidden)).toBe(true);
+    expect(partitionDuelLists([left, hidden]).main.map((row) => row.id)).toEqual(["left"]);
+    expect(partitionDuelLists([left, hidden]).archived.map((row) => row.id)).toEqual(["left"]);
+    expect(reviewArchiveRequest({
+      viewerId: "you",
+      memberUserId: "you",
+      memberStatus: "left",
+      duelStatus: "active",
+    })).toEqual({ ok: true });
+    expect(reviewArchiveRequest({
+      viewerId: "you",
+      memberUserId: "you",
+      memberStatus: "active",
+      duelStatus: "active",
+    }).ok).toBe(false);
+    expect(reviewArchiveRequest({
+      viewerId: "you",
+      memberUserId: "friend",
+      memberStatus: "left",
+      duelStatus: "active",
+    }).ok).toBe(false);
+    expect(reviewArchiveRequest({
+      viewerId: "you",
+      memberUserId: "you",
+      memberStatus: "left",
+      duelStatus: "completed",
+    })).toEqual({ ok: true });
   });
 });
 

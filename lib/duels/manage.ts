@@ -11,7 +11,28 @@ export type DuelConfirmCopy = {
 };
 
 export function isArchivedDuel(item: Pick<DuelListItem, "archived" | "status">): boolean {
-  return item.status === "cancelled" || (Boolean(item.archived) && item.status === "completed");
+  return Boolean(item.archived) || item.status === "cancelled";
+}
+
+export function canArchiveDuel(item: Pick<DuelListItem, "archived" | "status" | "memberStatus">): boolean {
+  if (item.archived) return false;
+  if (item.status === "completed" || item.status === "cancelled") return true;
+  return item.status === "active" && item.memberStatus === "left";
+}
+
+export function reviewArchiveRequest(input: {
+  viewerId: string | null;
+  memberUserId: string | null;
+  memberStatus: "active" | "left";
+  duelStatus: "pending" | "active" | "completed" | "cancelled";
+}): { ok: true } | { ok: false; message: string } {
+  if (!input.viewerId) return { ok: false, message: "Sign in to manage this duel." };
+  if (!input.memberUserId || input.memberUserId !== input.viewerId) {
+    return { ok: false, message: "You are not in this duel." };
+  }
+  if (input.duelStatus === "completed" || input.duelStatus === "cancelled") return { ok: true };
+  if (input.duelStatus === "active" && input.memberStatus === "left") return { ok: true };
+  return { ok: false, message: "Only finished, cancelled, or left duels can be removed from your list." };
 }
 
 export function archivedDuelAction(item: Pick<DuelListItem, "archived" | "status">): "archive" | "restore" | null {
@@ -34,12 +55,18 @@ export function partitionDuelLists(items: DuelListItem[]): { main: DuelListItem[
 export function duelMenuAction(item: Pick<DuelListItem, "status" | "creator" | "memberStatus" | "archived">): DuelMenuAction | null {
   if (item.status === "pending" && item.creator && item.memberStatus === "active") return "cancel";
   if (item.status === "active" && item.memberStatus === "active") return "leave";
-  if ((item.status === "completed" || item.status === "cancelled") && !item.archived) return "archive";
+  if (canArchiveDuel(item)) return "archive";
   return null;
 }
 
 export function canRestoreDuel(item: Pick<DuelListItem, "archived">): boolean {
   return item.archived === true;
+}
+
+export function archivedDuelLabel(item: Pick<DuelListItem, "status" | "memberStatus">): string {
+  if (item.status === "cancelled") return "Cancelled";
+  if (item.status === "active" && item.memberStatus === "left") return "Left";
+  return "Completed";
 }
 
 export function duelActionCopy(action: DuelMenuAction, title: string): DuelConfirmCopy {

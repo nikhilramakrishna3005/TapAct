@@ -81,6 +81,22 @@ describe("duel migration authorization", () => {
     expect(setRules).not.toContain("tapact_duel_activities_sort_unique");
   });
 
+  it("lets a departed member archive only their own list row", () => {
+    const left = readFileSync(resolve(process.cwd(), "supabase/migrations/20261013230000_tapact_duel_left_archive.sql"), "utf8");
+    expect(left).toContain("create or replace function public.tapact_archive_duel(p_duel uuid)");
+    expect(left).toContain("set search_path = ''");
+    expect(left).toContain("security definer");
+    expect(left).toContain("d.status = 'active' and m.status = 'left'");
+    expect(left).toContain("set hidden_at = coalesce(hidden_at, now())");
+    expect(left).toContain("where duel_id = p_duel and user_id = uid");
+    expect(left).not.toContain("create or replace function public.tapact_leave_duel");
+    expect(left).not.toContain("create or replace function public.tapact_duel_member_score");
+    expect(left).not.toContain("create or replace function public.tapact_duel_timer_minutes");
+    expect(left).not.toMatch(/set\s+constraints/i);
+    expect(left).not.toMatch(/grant (insert|update|delete|select) on public\.tapact_duel/i);
+    expect(left).toContain("grant execute on function public.tapact_archive_duel(uuid) to authenticated");
+  });
+
   it("versions duel rules and keeps client table access closed", () => {
     const rules = readFileSync(resolve(process.cwd(), "supabase/migrations/20261013160000_tapact_duel_rule_versions.sql"), "utf8");
     for (const table of ["tapact_duel_rule_versions", "tapact_duel_rule_items", "tapact_duel_proposals"]) {
