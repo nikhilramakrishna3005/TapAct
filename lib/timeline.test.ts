@@ -102,6 +102,25 @@ describe("buildDayTimeline", () => {
     expect(timeline.untimed).toEqual([]);
   });
 
+  it("hides deleted entries, flags manual ones, and lists the entries behind each session", () => {
+    const entries: TimeEntry[] = [
+      { ...entry("coding", at(12, 9), at(12, 10)), deletedAtMs: 5 },
+      { ...entry("coding", at(12, 11), at(12, 12)), source: "manual" },
+      entry("coding", at(12, 12), at(12, 13)),
+    ];
+    const timeline = buildDayTimeline({
+      dayKey: "2026-10-12",
+      entries,
+      activities,
+      dailyRecords: computeDailyRecords({ entries, baselines: [] }),
+      live: null,
+    });
+    expect(timeline.sessions).toHaveLength(1);
+    expect(timeline.sessions[0]).toMatchObject({ manual: true, dayStartMs: at(12, 11), dayEndMs: at(12, 13) });
+    expect(timeline.sessions[0].entryIds).toEqual([entries[1].id, entries[2].id].sort());
+    expect(timeline.untimed).toEqual([]);
+  });
+
   it("skips segments of activities the tracker doesn't know", () => {
     const timeline = buildDayTimeline({
       dayKey: "2026-10-12",

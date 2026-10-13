@@ -130,7 +130,10 @@ export function sanitizeEntry(value: unknown): TimeEntry | null {
   if (!isFiniteNumber(value.startMs) || !isFiniteNumber(value.endMs) || value.startMs <= 0 || value.endMs < value.startMs) {
     return null;
   }
-  return { id, activityId, deviceId, startMs: value.startMs, endMs: value.endMs };
+  const entry: TimeEntry = { id, activityId, deviceId, startMs: value.startMs, endMs: value.endMs };
+  if (value.source === "manual") entry.source = "manual";
+  if (isFiniteNumber(value.deletedAtMs) && value.deletedAtMs >= 0) entry.deletedAtMs = value.deletedAtMs;
+  return entry;
 }
 
 export function sanitizeBaseline(value: unknown): Baseline | null {
@@ -235,7 +238,7 @@ export function removeConfirmed(meta: SyncMeta, userId: string, confirmed: SyncS
     }),
     entries: current.entries.filter((item) => {
       const sent = sentEntries.get(item.id);
-      return !(sent && sent.endMs >= item.endMs);
+      return !(sent && sent.endMs >= item.endMs && (item.deletedAtMs === undefined || sent.deletedAtMs !== undefined));
     }),
     baselines: current.baselines.filter((item) => !sentBaselines.has(item.id)),
   };

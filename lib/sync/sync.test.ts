@@ -16,6 +16,7 @@ import {
   type Baseline,
   computeDailyRecords,
   mergeActivity,
+  mergeEntryLists,
   type SyncActivity,
   type SyncSnapshot,
   type TimeEntry,
@@ -88,7 +89,7 @@ class FakeServer {
           if (!this.activities.some((row) => row.userId === userId && row.item.id === entry.activityId)) {
             throw new SyncError("server", "foreign key violation");
           }
-          this.upsert(this.entries, userId, entry, (old, next) => ({ ...old, endMs: Math.max(old.endMs, next.endMs) }));
+          this.upsert(this.entries, userId, entry, (old, next) => mergeEntryLists([old], [next])[0]);
         }
       },
       pull: async (userId, cursors) => {

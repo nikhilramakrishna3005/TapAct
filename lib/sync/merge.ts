@@ -20,14 +20,25 @@ export type SyncActivity = {
   deviceId: string;
 };
 
-/** A timer segment recorded on one device. Its end only ever grows. */
+/**
+ * A session recorded on one device. Its identity is immutable and its end only ever
+ * grows; corrections are a tombstone on the original plus a new "manual" entry.
+ */
 export type TimeEntry = {
   id: string;
   activityId: string;
   deviceId: string;
   startMs: number;
   endMs: number;
+  /** Absent for timer segments. */
+  source?: "manual";
+  /** Set once the session was deleted or replaced by an edit; never cleared. */
+  deletedAtMs?: number;
 };
+
+export function isLiveEntry(entry: TimeEntry): boolean {
+  return entry.deletedAtMs === undefined;
+}
 
 /** A per-day total imported from pre-sync history (no interval detail available). */
 export type Baseline = {
@@ -117,14 +128,24 @@ export function mergeActivityLists(...lists: SyncActivity[][]): SyncActivity[] {
   return [...byId.values()];
 }
 
-/** Same entry from several sources (retries, both devices): keep the longest end. */
+/**
+ * Same entry from several sources (retries, both devices): keep the longest end, and a
+ * deletion from any source wins (earliest time), so a stale copy can't restore it.
+ */
 export function mergeEntryLists(...lists: TimeEntry[][]): TimeEntry[] {
   const byId = new Map<string, TimeEntry>();
   for (const list of lists) {
     for (const entry of list) {
       const existing = byId.get(entry.id);
-      if (!existing || entry.endMs > existing.endMs) {
-        byId.set(entry.id, existing ? { ...existing, endMs: entry.endMs } : entry);
+      if (!existing) {
+        byId.set(entry.id, entry);
+        continue;
+      }
+      const deletedAtMs = earliestArchive(existing.deletedAtMs ?? null, entry.deletedAtMs ?? null);
+      if (entry.endMs > existing.endMs || deletedAtMs !== (existing.deletedAtMs ?? null)) {
+        const merged: TimeEntry = { ...existing, endMs: Math.max(existing.endMs, entry.endMs) };
+        if (deletedAtMs !== null) merged.deletedAtMs = deletedAtMs;
+        byId.set(entry.id, merged);
       }
     }
   }
@@ -175,7 +196,7 @@ export function unionIntervals(intervals: { startMs: number; endMs: number }[]):
  *   except identical totals, which are the same history imported twice (for example a
  *   restored backup on a second device) and are counted once.
  * - Timer segments are unioned per activity, so overlapping time from two devices,
- *   or the same segment uploaded twice, is never counted twice.
+ *   or the same segment uploaded twice, is never counted twice. Deleted ones don't count.
  */
 export function computeDailyRecords(snapshot: Pick<SyncSnapshot, "entries" | "baselines">): DailyRecords {
   const records: DailyRecords = {};
@@ -201,6 +222,7 @@ export function computeDailyRecords(snapshot: Pick<SyncSnapshot, "entries" | "ba
 
   const byActivity = new Map<string, TimeEntry[]>();
   for (const entry of snapshot.entries) {
+    if (!isLiveEntry(entry)) continue;
     const list = byActivity.get(entry.activityId) ?? [];
     list.push(entry);
     byActivity.set(entry.activityId, list);

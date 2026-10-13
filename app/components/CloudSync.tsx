@@ -15,6 +15,7 @@ import {
   type SyncRunResult,
 } from "@/lib/sync/engine";
 import { runningSegment } from "@/lib/sync/merge";
+import { type RescueResult, rescueSession as applyRescue, type SessionChange } from "@/lib/sync/rescue";
 import { classifyRemoteError, createSupabaseRemote, SyncError } from "@/lib/sync/remote";
 import {
   decideOwnership,
@@ -63,6 +64,8 @@ type CloudSyncValue = {
   mergeStash: (stashId: string) => Promise<void>;
   /** Must run before a backup restore replaces account-owned data. */
   beforeRestore: () => void;
+  /** Edits, adds or deletes a recorded session (queued offline, synced in the background). */
+  rescueSession: (change: SessionChange) => RescueResult;
 };
 
 const CloudSyncContext = createContext<CloudSyncValue | null>(null);
@@ -329,6 +332,24 @@ export function CloudSyncProvider({
     refresh();
   }, [commit, refresh]);
 
+  const trackerRef = useRef(tracker);
+  trackerRef.current = tracker;
+  const rescueSession = useCallback(
+    (change: SessionChange) => {
+      const result = applyRescue(
+        { storage: getStorage(), commit: (update) => commit(update, { source: "sync" }).state, now: () => Date.now() },
+        trackerRef.current,
+        change,
+      );
+      if (result.ok) {
+        refresh();
+        window.dispatchEvent(new Event(SYNC_DIRTY_EVENT));
+      }
+      return result;
+    },
+    [commit, refresh],
+  );
+
   const closePrompt = useCallback(() => {
     dismissedForRef.current = accountRef.current?.userId ?? null;
     setPromptOpen(false);
@@ -352,10 +373,12 @@ export function CloudSyncProvider({
       keepLocalAside,
       mergeStash,
       beforeRestore,
+      rescueSession,
     }),
     [
       account?.userId,
       beforeRestore,
+      rescueSession,
       decision,
       errorMessage,
       importLocal,
