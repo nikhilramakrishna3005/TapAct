@@ -12,6 +12,7 @@ import {
   shiftDayKey,
 } from "@/lib/insights";
 import { MS_PER_MINUTE, type TrackerState } from "@/lib/tracker";
+import { OrbitTimeline } from "./OrbitTimeline";
 import {
   ActivityBreakdownRow,
   EmptyState,
@@ -31,11 +32,20 @@ function describeDay(dayKey: string, todayKey: string): string {
   return parseDayKey(dayKey).toLocaleDateString(undefined, { weekday: "long" });
 }
 
-export function HistoryView({ tracker, todayKey }: { tracker: TrackerState; todayKey: string }) {
+export function HistoryView({
+  tracker,
+  todayKey,
+  nowMs,
+}: {
+  tracker: TrackerState;
+  todayKey: string;
+  nowMs: number;
+}) {
   const records = tracker.dailyRecords;
   const [selectedKey, setSelectedKey] = useState(todayKey);
   const [direction, setDirection] = useState(0);
   const stripRef = useRef<HTMLDivElement>(null);
+  const dateInputRef = useRef<HTMLInputElement>(null);
 
   const recordedKeys = useMemo(() => getRecordedDayKeys(records), [records]);
   const stripKeys = useMemo(
@@ -79,18 +89,41 @@ export function HistoryView({ tracker, todayKey }: { tracker: TrackerState; toda
           >
             <ChevronLeft className="size-4" />
           </button>
-          <div className="min-w-0 text-center">
-            <p className="text-base font-semibold tracking-[-0.01em] text-text-1">
+          <label className="relative min-w-0 cursor-pointer rounded-2xl px-3 py-1 text-center transition-colors hover:bg-white/[0.04] focus-within:ring-2 focus-within:ring-volt-hi">
+            <span className="block text-base font-semibold tracking-[-0.01em] text-text-1">
               {describeDay(safeSelectedKey, todayKey)}
-            </p>
-            <p className="text-xs text-text-3">
+            </span>
+            <span className="flex items-center justify-center gap-1 text-xs text-text-3">
               {selectedDate.toLocaleDateString(undefined, {
                 month: "long",
                 day: "numeric",
                 year: "numeric",
               })}
-            </p>
-          </div>
+              <CalendarDays aria-hidden="true" className="size-3" />
+            </span>
+            <input
+              ref={dateInputRef}
+              type="date"
+              aria-label="Pick a date"
+              value={safeSelectedKey}
+              min={earliestKey}
+              max={todayKey}
+              onClick={() => {
+                try {
+                  dateInputRef.current?.showPicker?.();
+                } catch {
+                  // Some browsers only allow showPicker from certain gestures; the native control still works.
+                }
+              }}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (/^\d{4}-\d{2}-\d{2}$/.test(value) && value <= todayKey && value >= earliestKey) {
+                  selectDay(value);
+                }
+              }}
+              className="absolute inset-0 size-full cursor-pointer opacity-0 [color-scheme:dark]"
+            />
+          </label>
           <button
             type="button"
             onClick={() => selectDay(shiftDayKey(safeSelectedKey, 1))}
@@ -158,6 +191,13 @@ export function HistoryView({ tracker, todayKey }: { tracker: TrackerState; toda
               emphasis
             />
           </section>
+
+          <OrbitTimeline
+            tracker={tracker}
+            dayKey={safeSelectedKey}
+            nowMs={nowMs}
+            isToday={safeSelectedKey === todayKey}
+          />
 
           <SectionCard
             title="Breakdown"

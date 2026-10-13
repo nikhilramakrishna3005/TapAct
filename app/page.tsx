@@ -695,7 +695,7 @@ function Home() {
             {tab === "insights" ? (
               <InsightsView tracker={liveTracker} todayKey={todayKey} />
             ) : tab === "history" ? (
-              <HistoryView tracker={liveTracker} todayKey={todayKey} />
+              <HistoryView tracker={liveTracker} todayKey={todayKey} nowMs={nowMs} />
             ) : tab === "settings" ? (
               <SettingsView
                 tracker={tracker}
