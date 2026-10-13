@@ -38,7 +38,7 @@ export function CharacterPortrait({
     <div
       className={
         stage
-          ? `relative isolate h-[7.5rem] w-full overflow-hidden ${className}`
+          ? `relative isolate h-[6.75rem] w-full overflow-hidden ${className}`
           : `relative mx-auto shrink-0 overflow-hidden rounded-[18px] ${SIZES[size]} ${className}`
       }
       style={stage ? undefined : { boxShadow: `0 0 0 1px ${accent}55, 0 0 18px ${accent}22` }}
@@ -60,12 +60,20 @@ export function CharacterPortrait({
         <>
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-[#0a0a10] via-[#0a0a10]/70 to-transparent"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-[#0a0a10] via-[#0a0a10]/55 to-transparent"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-[#0a0a10]/70 to-transparent"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-[#0a0a10]/70 to-transparent"
           />
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0"
-            style={{ boxShadow: `inset 0 0 28px ${accent}26` }}
+            style={{ boxShadow: `inset 0 0 24px ${accent}22` }}
           />
         </>
       )}

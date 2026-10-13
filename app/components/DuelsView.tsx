@@ -343,47 +343,37 @@ export function DuelsView({
 
   return (
     <>
-      <ScreenHeader eyebrow="Duels" title="The arena." />
+      <ScreenHeader eyebrow="Duels" title="The arena." compact />
 
       {characterReady && (
-        <section className="mt-4 flex items-center justify-between gap-3 rounded-[20px] border border-line bg-ink-1 px-3 py-2.5">
-          <div className="flex min-w-0 items-center gap-3">
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <CharacterPortrait character={character} name={auth.account?.displayName ?? "You"} size="sm" className="mx-0" />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-text-1">
-                {character ? `${archetypeOf(character.archetype)?.name ?? "Character"} · ${character.title}` : "Choose your character"}
-              </p>
-              <p className="truncate text-xs text-text-3">{character ? "Shown in every duel. Cosmetic only." : "Skip now, or pick one before your next challenge."}</p>
-            </div>
+            <p className="truncate text-sm font-semibold text-text-1">
+              {character ? `${archetypeOf(character.archetype)?.name ?? "Character"} · ${character.title}` : "Choose your character"}
+            </p>
           </div>
-          <div className="flex shrink-0 flex-col items-end">
-            <button
-              type="button"
-              className="min-h-11 text-xs font-semibold text-volt-hi"
-              onClick={() => setPicker(character ? "change" : "choose")}
-            >
-              {character ? "Change" : "Choose"}
-            </button>
-            {character && (
-              <button type="button" className="min-h-11 text-xs font-semibold text-volt-hi" onClick={() => setPicker("customize")}>
-                Customize
-              </button>
-            )}
-          </div>
-        </section>
+          <button
+            type="button"
+            className="min-h-11 shrink-0 px-1 text-xs font-semibold text-volt-hi"
+            onClick={() => setPicker(character ? "change" : "choose")}
+          >
+            {character ? "Edit" : "Choose"}
+          </button>
+        </div>
       )}
 
       {unsynced && (
-        <p role="status" className="mt-4 rounded-2xl border border-ember/30 bg-ember/[0.07] px-3 py-2.5 text-xs text-[#FFD3B0]">
+        <p role="status" className="mt-2 rounded-2xl border border-ember/30 bg-ember/[0.07] px-3 py-2 text-xs text-[#FFD3B0]">
           {sync.status === "offline"
             ? "You're offline. Challenge scores aren't final until tracking syncs."
             : "Some tracking hasn't synced yet, so these scores aren't final."}
         </p>
       )}
-      {error && <p role="alert" className="mt-4 text-sm text-danger">{error}</p>}
-      {note && <p role="status" className="mt-4 text-sm text-mint">{note}</p>}
+      {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
+      {note && <p role="status" className="mt-2 text-sm text-mint">{note}</p>}
 
-      <div className="mt-4 flex items-center justify-between gap-2">
+      <div className="mt-2 flex items-center justify-between gap-2">
         <p className="eyebrow">Your duels</p>
         <button type="button" onClick={() => setCreating(true)} className="btn btn-primary h-11 px-4">Create duel</button>
       </div>

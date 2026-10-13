@@ -338,24 +338,8 @@ body::before {
   animation: breathe 3.2s ease-in-out infinite;
 }
 
-@keyframes arena-live {
-  0%,
-  100% { opacity: 0.28; }
-  50% { opacity: 0.62; }
-}
-
-@keyframes arena-vs {
-  0%,
-  100% { box-shadow: 0 0 0 1px rgba(142, 123, 255, 0.35), 0 0 12px rgba(95, 227, 255, 0.12); }
-  50% { box-shadow: 0 0 0 1px rgba(95, 227, 255, 0.5), 0 0 16px rgba(142, 123, 255, 0.22); }
-}
-
-.arena-live-glow {
-  animation: arena-live 2.6s ease-in-out infinite;
-}
-
 .arena-vs-energy {
-  animation: arena-vs 2.8s ease-in-out infinite;
+  box-shadow: 0 0 0 1px rgba(95, 227, 255, 0.42), 0 0 14px rgba(142, 123, 255, 0.28);
 }
 
 [data-motion="reduced"] *,
@@ -373,9 +357,7 @@ body::before {
   .ambient-breathe,
   .busy-orbit,
   .busy-spin,
-  .busy-spin-icon,
-  .arena-live-glow,
-  .arena-vs-energy {
+  .busy-spin-icon {
     animation: none !important;
   }
 }

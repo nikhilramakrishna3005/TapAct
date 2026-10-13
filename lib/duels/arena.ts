@@ -13,6 +13,19 @@ export function leadCopy(lead: ArenaLead): string {
   return "They lead";
 }
 
+export function compactDuelStatus(input: {
+  todayKey: string;
+  startsOn: string;
+  durationDays: number;
+  dayIndex: number;
+  completed: boolean;
+}): string {
+  if (input.completed) return "Completed";
+  if (input.todayKey < input.startsOn) return "Upcoming";
+  if (input.dayIndex >= 0) return `Day ${input.dayIndex + 1} of ${input.durationDays}`;
+  return "Completed";
+}
+
 /** Score share for the momentum bar. This is not health or damage. */
 export function momentumShares(youScore: number, friendScore: number | null): {
   youPercent: number;
