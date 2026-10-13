@@ -1,8 +1,8 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { Archive, ChevronDown, Radio, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Archive, ChevronDown, PencilLine, Plus, Radio, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DURATION, EASE_OUT } from "@/lib/motion";
 import { SYNC_DIRTY_EVENT } from "@/lib/sync/capture";
 import { runningSegment } from "@/lib/sync/merge";
@@ -15,6 +15,8 @@ import {
   type TimelineSession,
 } from "@/lib/timeline";
 import type { TrackerState } from "@/lib/tracker";
+import { useCloudSync } from "./CloudSync";
+import { DeleteSessionSheet, SessionEditorSheet } from "./SessionSheet";
 import { formatSummaryDuration, ICON_REGISTRY, SectionCard, tint } from "./ui";
 
 const LABELED_HOURS = [0, 6, 12, 18, 24];
@@ -91,9 +93,15 @@ export function OrbitTimeline({
   isToday: boolean;
 }) {
   const recorded = useRecordedSegments(tracker.revision);
+  const { rescueSession } = useCloudSync();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [editor, setEditor] = useState<{ session: TimelineSession | null } | null>(null);
+  const [deleting, setDeleting] = useState<TimelineSession | null>(null);
   const trackRef = useRef<HTMLDivElement>(null);
+  const canEdit = recorded?.canEdit ?? false;
+  const closeEditor = useCallback(() => setEditor(null), []);
+  const closeDelete = useCallback(() => setDeleting(null), []);
 
   const timeline = useMemo(() => {
     const live = recorded?.owned ? runningSegment(tracker, recorded.deviceId, recorded.floor) : null;
@@ -118,10 +126,6 @@ export function OrbitTimeline({
   const laneGap = 4;
   const laneHeight = laneCount === 1 ? 40 : laneCount === 2 ? 20 : 16;
   const trackHeight = laneCount * laneHeight + (laneCount - 1) * laneGap + 12;
-
-  useEffect(() => {
-    if (selectedId && !selected) setSelectedId(null);
-  }, [selected, selectedId]);
 
   const selectAt = (clientX: number, clientY: number) => {
     const rect = trackRef.current?.getBoundingClientRect();
@@ -154,13 +158,25 @@ export function OrbitTimeline({
     <SectionCard
       title="Timeline"
       aside={
-        <p className="text-xs text-text-3">
-          {sessions.length > 0
-            ? `${sessions.length} session${sessions.length === 1 ? "" : "s"}`
-            : untimed.length > 0
-              ? "Totals only"
-              : "24 hours"}
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-text-3">
+            {sessions.length > 0
+              ? `${sessions.length} session${sessions.length === 1 ? "" : "s"}`
+              : untimed.length > 0
+                ? "Totals only"
+                : "24 hours"}
+          </p>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setEditor({ session: null })}
+              className="inline-flex min-h-9 items-center gap-1 rounded-full border border-line-strong bg-ink-0 px-3 text-xs font-medium text-text-1 transition-colors hover:border-volt/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
+            >
+              <Plus className="size-3.5" />
+              Add
+            </button>
+          )}
+        </div>
       }
     >
       <div className="relative">
@@ -235,7 +251,9 @@ export function OrbitTimeline({
                   top: 6 + session.lane * (laneHeight + laneGap),
                   height: laneHeight,
                   borderRadius: `${session.continuesFromPreviousDay ? 3 : 999}px ${session.continuesIntoNextDay ? 3 : 999}px ${session.continuesIntoNextDay ? 3 : 999}px ${session.continuesFromPreviousDay ? 3 : 999}px`,
-                  background: `linear-gradient(180deg, ${tint(color, 0.95)}, ${tint(color, 0.7)})`,
+                  background: session.manual
+                    ? `repeating-linear-gradient(135deg, rgba(255,255,255,0.22) 0 2px, transparent 2px 6px), linear-gradient(180deg, ${tint(color, 0.85)}, ${tint(color, 0.6)})`
+                    : `linear-gradient(180deg, ${tint(color, 0.95)}, ${tint(color, 0.7)})`,
                   boxShadow: isSelected
                     ? `0 0 0 1.5px rgba(244,243,250,0.9), 0 0 18px ${tint(color, 0.7)}`
                     : `0 0 12px -2px ${tint(color, 0.45)}, inset 0 1px 0 rgba(255,255,255,0.25)`,
@@ -284,11 +302,63 @@ export function OrbitTimeline({
               dayStartMs={timeline.startMs}
               dayEndMs={timeline.endMs}
               nowMs={nowMs}
+              editHint={
+                canEdit
+                  ? selected.live
+                    ? "Stop the timer to edit this session."
+                    : null
+                  : recorded?.owned
+                    ? "Sync once with your account to edit sessions."
+                    : "Sign in and sync to edit sessions."
+              }
+              onEdit={canEdit && !selected.live ? () => setEditor({ session: selected }) : undefined}
+              onDelete={canEdit && !selected.live ? () => setDeleting(selected) : undefined}
               onClose={() => setSelectedId(null)}
             />
           )}
         </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {editor && (
+          <SessionEditorSheet
+            key="session-editor"
+            session={editor.session}
+            dayKey={dayKey}
+            tracker={tracker}
+            entries={recorded?.entries ?? []}
+            nowMs={nowMs}
+            untimedMs={untimed.reduce((sum, item) => sum + item.ms, 0)}
+            onSubmit={(change) => {
+              const result = rescueSession(change);
+              if (result.ok && change.kind === "save") {
+                setSelectedId(`${change.draft.activityId}:${Math.round(change.draft.startMs)}`);
+              }
+              return result;
+            }}
+            onDelete={() => {
+              const session = editor.session;
+              setEditor(null);
+              setDeleting(session);
+            }}
+            onClose={closeEditor}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {deleting && (
+          <DeleteSessionSheet
+            key="session-delete"
+            session={deleting}
+            onConfirm={() => {
+              const result = rescueSession({ kind: "delete", replaceIds: deleting.entryIds });
+              if (result.ok) setSelectedId(null);
+              return result;
+            }}
+            onClose={closeDelete}
+          />
+        )}
+      </AnimatePresence>
 
       {!hasAnything && (
         <p className="mt-3 text-center text-xs text-text-3">Nothing tracked this day.</p>
@@ -319,6 +389,7 @@ export function OrbitTimeline({
                     <span className="flex items-center gap-1.5 truncate text-sm font-medium text-text-1">
                       <span className="truncate">{session.activity.name}</span>
                       {session.live && <LiveBadge />}
+                      {session.manual && <ManualBadge />}
                       {session.activity.archivedAtMs !== null && <ArchivedBadge />}
                     </span>
                     <span className="numeric block text-xs text-text-3">
@@ -393,17 +464,32 @@ function ArchivedBadge() {
   );
 }
 
+function ManualBadge() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-volt/15 px-1.5 py-0.5 text-[0.55rem] font-semibold uppercase tracking-[0.12em] text-volt-hi">
+      <PencilLine className="size-2.5" />
+      Manual
+    </span>
+  );
+}
+
 function SessionDetail({
   session,
   dayStartMs,
   dayEndMs,
   nowMs,
+  editHint,
+  onEdit,
+  onDelete,
   onClose,
 }: {
   session: TimelineSession;
   dayStartMs: number;
   dayEndMs: number;
   nowMs: number;
+  editHint: string | null;
+  onEdit?: () => void;
+  onDelete?: () => void;
   onClose: () => void;
 }) {
   const { activity } = session;
@@ -438,6 +524,7 @@ function SessionDetail({
             <p className="flex items-center gap-1.5 text-base font-semibold tracking-[-0.01em] text-text-1">
               <span className="truncate">{activity.name}</span>
               {session.live && <LiveBadge />}
+              {session.manual && <ManualBadge />}
               {activity.archivedAtMs !== null && <ArchivedBadge />}
             </p>
             <p className="numeric text-xs text-text-3">{formatDuration(totalMs)} session</p>
@@ -462,6 +549,31 @@ function SessionDetail({
           Crosses midnight · <span className="numeric text-text-2">{formatDuration(onDayMs)}</span> on this day
         </p>
       )}
+      {(onEdit || onDelete) && (
+        <div className="mt-3 flex gap-2">
+          {onEdit && (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full border border-line-strong bg-ink-0/60 text-sm font-medium text-text-1 transition-colors hover:border-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
+            >
+              <PencilLine className="size-4" />
+              Edit
+            </button>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              aria-label="Delete session"
+              className="grid size-11 shrink-0 place-items-center rounded-full border border-danger/35 text-[#FFC4C4] transition-colors hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          )}
+        </div>
+      )}
+      {editHint && <p className="mt-2.5 text-xs text-text-3">{editHint}</p>}
     </motion.div>
   );
 }

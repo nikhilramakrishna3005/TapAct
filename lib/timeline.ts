@@ -1,5 +1,5 @@
 import { parseDayKey, shiftDayKey } from "./insights";
-import { mergeEntryLists, type SessionFloor, unionIntervals, type TimeEntry } from "./sync/merge";
+import { isLiveEntry, mergeEntryLists, type SessionFloor, unionIntervals, type TimeEntry } from "./sync/merge";
 import { getOutbox, loadSyncCache, loadSyncMeta, SYNC_META_KEY } from "./sync/state";
 import type { Activity, DailyRecords } from "./tracker";
 import type { WritableStorageLike } from "./trackerStore";
@@ -7,12 +7,15 @@ import type { WritableStorageLike } from "./trackerStore";
 export type RecordedSegments = {
   /** False for guest data, which keeps per-day totals only. */
   owned: boolean;
+  /** Sessions can be corrected once this device has synced with the owning account. */
+  canEdit: boolean;
   deviceId: string;
   floor: SessionFloor;
+  /** Includes deleted entries (tombstones). */
   entries: TimeEntry[];
 };
 
-const NO_SEGMENTS: RecordedSegments = { owned: false, deviceId: "", floor: null, entries: [] };
+const NO_SEGMENTS: RecordedSegments = { owned: false, canEdit: false, deviceId: "", floor: null, entries: [] };
 
 /**
  * Timer segments recorded for the account that owns this device's tracker data:
@@ -26,6 +29,7 @@ export function loadRecordedSegments(storage: WritableStorageLike | null): Recor
     const cache = loadSyncCache(storage, meta.owner.userId);
     return {
       owned: true,
+      canEdit: meta.lastSyncedUserId === meta.owner.userId,
       deviceId: meta.deviceId,
       floor: meta.floor,
       entries: mergeEntryLists(cache.snapshot.entries, getOutbox(meta, meta.owner.userId).entries),
@@ -48,6 +52,10 @@ export type TimelineSession = {
   continuesFromPreviousDay: boolean;
   continuesIntoNextDay: boolean;
   live: boolean;
+  /** Entered or corrected by hand rather than recorded by the timer. */
+  manual: boolean;
+  /** The recorded entries this session is made of; an edit or delete replaces all of them. */
+  entryIds: string[];
   /** Row on the track; sessions only share a row when they don't overlap. */
   lane: number;
 };
@@ -129,8 +137,8 @@ export function buildDayTimeline({
   const byId = new Map(activities.map((activity) => [activity.id, activity]));
 
   const byActivity = new Map<string, TimeEntry[]>();
-  for (const entry of live ? [...entries, live] : entries) {
-    if (!byId.has(entry.activityId) || entry.endMs <= startMs || entry.startMs >= endMs) continue;
+  for (const entry of mergeEntryLists(entries, live ? [live] : [])) {
+    if (!isLiveEntry(entry) || !byId.has(entry.activityId) || entry.endMs <= startMs || entry.startMs >= endMs) continue;
     const list = byActivity.get(entry.activityId) ?? [];
     list.push(entry);
     byActivity.set(entry.activityId, list);
@@ -145,7 +153,10 @@ export function buildDayTimeline({
       const dayEndMs = Math.min(interval.endMs, endMs);
       if (dayEndMs <= dayStartMs) continue;
       timedByActivity.set(activityId, (timedByActivity.get(activityId) ?? 0) + (dayEndMs - dayStartMs));
+      const parts = list.filter((entry) => entry.startMs >= interval.startMs && entry.endMs <= interval.endMs);
       unplaced.push({
+        manual: parts.some((entry) => entry.source === "manual"),
+        entryIds: parts.map((entry) => entry.id).sort(),
         id: `${activityId}:${interval.startMs}`,
         activity,
         startMs: interval.startMs,

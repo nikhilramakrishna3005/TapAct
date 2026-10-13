@@ -45,6 +45,9 @@ export function classifyRemoteError(error: PostgrestErrorLike | unknown): SyncEr
   if (code === "PGRST205" || code === "42P01" || message.includes("could not find the table")) {
     return new SyncError("not-set-up", "Cloud storage for TapAct isn't set up yet.");
   }
+  if (code === "PGRST204" || code === "42703") {
+    return new SyncError("not-set-up", "Cloud storage needs the latest TapAct update before session edits can sync.");
+  }
   if (code === "PGRST301" || code === "PGRST303" || code === "42501" || candidate.status === 401 || message.includes("jwt")) {
     return new SyncError("auth", "Your session needs to be refreshed. Sign in again to continue syncing.");
   }
@@ -83,14 +86,27 @@ export function activityToRow(userId: string, activity: SyncActivity) {
   };
 }
 
+/** Manual or deleted sessions need the session-edit columns; plain timer segments don't. */
+export function isEditedEntry(entry: TimeEntry): boolean {
+  return entry.source === "manual" || entry.deletedAtMs !== undefined;
+}
+
 export function entryToRow(userId: string, entry: TimeEntry) {
-  return {
+  const row = {
     user_id: userId,
     id: entry.id,
     activity_id: entry.activityId,
     device_id: entry.deviceId,
     started_at_ms: Math.round(entry.startMs),
     ended_at_ms: Math.round(entry.endMs),
+  };
+  if (!isEditedEntry(entry)) {
+    return row;
+  }
+  return {
+    ...row,
+    source: entry.source ?? "timer",
+    deleted_at_ms: entry.deletedAtMs === undefined ? null : Math.round(entry.deletedAtMs),
   };
 }
 
@@ -126,6 +142,8 @@ export function rowToEntry(row: Record<string, unknown>): TimeEntry | null {
     deviceId: row.device_id,
     startMs: row.started_at_ms,
     endMs: row.ended_at_ms,
+    source: row.source,
+    deletedAtMs: row.deleted_at_ms,
   });
 }
 
@@ -208,7 +226,9 @@ export function createSupabaseRemote(client: SupabaseClient): SyncRemote {
       // Activities first: entries and baselines reference them.
       await upsert(TABLES.activities, changes.activities.map((item) => activityToRow(userId, item)));
       await upsert(TABLES.baselines, changes.baselines.map((item) => baselineToRow(userId, item)));
-      await upsert(TABLES.entries, changes.entries.map((item) => entryToRow(userId, item)));
+      // Separate requests keep row shapes uniform, so plain segments never send the edit columns.
+      await upsert(TABLES.entries, changes.entries.filter((item) => !isEditedEntry(item)).map((item) => entryToRow(userId, item)));
+      await upsert(TABLES.entries, changes.entries.filter(isEditedEntry).map((item) => entryToRow(userId, item)));
     },
     async pull(userId, cursors) {
       const activities = await pullTable(TABLES.activities, userId, cursors.activities, rowToActivity);

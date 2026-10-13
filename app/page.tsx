@@ -11,7 +11,6 @@ import {
   Plus,
   Settings2,
   UserRound,
-  X,
 } from "lucide-react";
 import {
   type FormEvent,
@@ -21,7 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { DURATION, EASE_OUT, SPRING_SHEET, SPRING_SNAPPY } from "@/lib/motion";
+import { DURATION, EASE_OUT, SPRING_SNAPPY } from "@/lib/motion";
 import { applyStarterActivities, type StarterActivity } from "@/lib/onboarding";
 import { shouldShowOnboarding } from "@/lib/preferences";
 import {
@@ -66,6 +65,7 @@ import {
   formatCompactHours,
   formatSummaryDuration,
   ICON_REGISTRY,
+  Sheet,
   StatTile,
   tint,
 } from "./components/ui";
@@ -121,53 +121,6 @@ function validateDraft(draft: ActivityDraft): { error: string } | { name: string
     return { error: "Daily goal must be between 1 and 1440 minutes." };
   }
   return { name, goalMinutes: Math.round(parsedGoal) };
-}
-
-function Sheet({
-  label,
-  onClose,
-  children,
-}: {
-  label: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <motion.div
-      className="fixed inset-0 z-30 bg-black/70"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: DURATION.quick }}
-      onClick={onClose}
-    >
-      <motion.section
-        role="dialog"
-        aria-modal="true"
-        aria-label={label}
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={SPRING_SHEET}
-        onClick={(event) => event.stopPropagation()}
-        className="absolute inset-x-0 bottom-0 mx-auto max-h-[92vh] w-full max-w-[430px] overflow-y-auto rounded-t-[var(--radius-xl)] border border-b-0 border-line-strong bg-ink-1 px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_60px_-30px_rgba(0,0,0,1)]"
-      >
-        <div className="mx-auto h-1 w-10 rounded-full bg-white/20" />
-        <div className="mt-3 flex items-center justify-between">
-          <h3 className="display text-[1.35rem]">{label}</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="grid size-11 place-items-center rounded-full border border-line-strong text-text-2 transition-colors hover:text-text-1"
-            aria-label={`Close ${label.toLowerCase()} panel`}
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-        {children}
-      </motion.section>
-    </motion.div>
-  );
 }
 
 function ActivityForm({
