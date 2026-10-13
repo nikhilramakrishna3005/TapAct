@@ -1,23 +1,28 @@
 "use client";
 
+import { motion } from "motion/react";
 import { MoreHorizontal, Swords } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DURATION, EASE_OUT } from "@/lib/motion";
 import { duelError, duelsApi, type DuelBoard, type DuelListItem } from "@/lib/duels/api";
 import {
   alreadyResolvedDuelAction,
   archivedDuelAction,
+  archivedDuelLabel,
   duelActionCopy,
   duelMenuAction,
   partitionDuelLists,
   restoreCopy,
   type DuelMenuAction,
 } from "@/lib/duels/manage";
+import { isCurrentBoardResponse, showcaseHistoryKey } from "@/lib/duels/navigation";
 import { battleFromBoard, type ShowcaseBattle } from "@/lib/duels/showcase";
 import type { TrackerState } from "@/lib/tracker";
 import type { TrackerUpdate } from "@/lib/trackerStore";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuth } from "./AuthProvider";
 import { useCloudSync } from "./CloudSync";
+import { useMotionPrefs } from "./MotionPrefs";
 import { ConfirmSheet } from "./duels/ConfirmSheet";
 import { BattleShowcase } from "./duels/BattleShowcase";
 import { CreateDuelSheet } from "./duels/CreateDuelSheet";
@@ -35,6 +40,7 @@ export function DuelsView({
 }) {
   const auth = useAuth();
   const sync = useCloudSync();
+  const motionPrefs = useMotionPrefs();
   const [items, setItems] = useState<DuelListItem[] | null>(null);
   const [board, setBoard] = useState<DuelBoard | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -46,35 +52,80 @@ export function DuelsView({
   const [menuId, setMenuId] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ id: string; action: DuelMenuAction | "restore" } | null>(null);
   const [acting, setActing] = useState(false);
+  const [switching, setSwitching] = useState(false);
   const actingLock = useRef(false);
   const opened = useRef(false);
+  const boardsRef = useRef(new Map<string, DuelBoard>());
+  const selectedRef = useRef<string | null>(null);
+  const latestBoardGen = useRef(0);
+  const historyKeyRef = useRef<string | null>(null);
+  selectedRef.current = selected;
 
-  const loadHistory = useCallback(async (list: DuelListItem[]) => {
+  const rememberBoard = useCallback((next: DuelBoard) => {
+    boardsRef.current.set(next.duel.id, next);
+    const battle = battleFromBoard(next);
+    if (battle) {
+      setBattles((current) => {
+        const without = current.filter((item) => item.id !== battle.id);
+        return [battle, ...without].sort((a, b) => (a.startsOn < b.startsOn ? 1 : a.startsOn > b.startsOn ? -1 : 0));
+      });
+    }
+  }, []);
+
+  const loadHistory = useCallback(async (list: DuelListItem[], force = false) => {
     const client = getSupabaseBrowserClient();
     if (!client) return;
-    const finished = list.filter((item) => item.status === "completed" || item.status === "active");
+    const key = showcaseHistoryKey(list);
+    if (!force && historyKeyRef.current === key) return;
+    historyKeyRef.current = key;
+    const finished = list.filter((item) => item.status === "completed");
+    if (finished.length === 0) {
+      setBattles([]);
+      return;
+    }
     const boards = await Promise.all(finished.map((item) => duelsApi.board(client, item.id).catch(() => null)));
     const next = boards.flatMap((item) => {
+      if (item) rememberBoard(item);
       const battle = item ? battleFromBoard(item) : null;
       return battle ? [battle] : [];
     });
     next.sort((a, b) => (a.startsOn < b.startsOn ? 1 : a.startsOn > b.startsOn ? -1 : 0));
     setBattles(next);
-  }, []);
+  }, [rememberBoard]);
 
-  const loadList = useCallback(async () => {
+  const loadList = useCallback(async (opts?: { history?: boolean }) => {
     const client = getSupabaseBrowserClient();
     if (!client) return;
     const next = await duelsApi.list(client);
     setItems(next);
-    await loadHistory(next);
+    if (opts?.history !== false) await loadHistory(next);
   }, [loadHistory]);
 
   const loadBoard = useCallback(async (duelId: string) => {
     const client = getSupabaseBrowserClient();
     if (!client) return;
-    setBoard(await duelsApi.board(client, duelId));
-  }, []);
+    const generation = latestBoardGen.current + 1;
+    latestBoardGen.current = generation;
+    const cached = boardsRef.current.get(duelId);
+    if (cached) {
+      setBoard(cached);
+      setSwitching(false);
+    } else {
+      setSwitching(true);
+    }
+    const next = await duelsApi.board(client, duelId);
+    if (!isCurrentBoardResponse({
+      requestId: duelId,
+      selectedId: selectedRef.current,
+      generation,
+      latestGeneration: latestBoardGen.current,
+    })) {
+      return;
+    }
+    rememberBoard(next);
+    setBoard(next);
+    setSwitching(false);
+  }, [rememberBoard]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -109,7 +160,10 @@ export function DuelsView({
     if (!selected || auth.status !== "signed-in") return;
     let cancelled = false;
     loadBoard(selected).catch((caught) => {
-      if (!cancelled) setError(duelError(caught));
+      if (!cancelled && selectedRef.current === selected) {
+        setSwitching(false);
+        setError(duelError(caught));
+      }
     });
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
@@ -124,8 +178,8 @@ export function DuelsView({
   const refresh = async () => {
     setError(null);
     try {
-      await loadList();
-      if (selected) await loadBoard(selected);
+      await loadList({ history: false });
+      if (selectedRef.current) await loadBoard(selectedRef.current);
     } catch (caught) {
       setError(duelError(caught));
     }
@@ -148,11 +202,24 @@ export function DuelsView({
         setNote(success ?? "That's already done.");
       } else {
         setError(message);
-        if (selected) void loadBoard(selected).catch(() => undefined);
+        if (selectedRef.current) void loadBoard(selectedRef.current).catch(() => undefined);
       }
     } finally {
       actingLock.current = false;
       setActing(false);
+    }
+  };
+
+  const selectDuel = (duelId: string) => {
+    if (duelId === selected) return;
+    setError(null);
+    setSelected(duelId);
+    const cached = boardsRef.current.get(duelId);
+    if (cached) {
+      setBoard(cached);
+      setSwitching(false);
+    } else {
+      setSwitching(true);
     }
   };
 
@@ -188,7 +255,9 @@ export function DuelsView({
 
   const unsynced = sync.pending > 0 || sync.status === "offline" || sync.status === "error";
   const { main, archived } = partitionDuelLists(items);
-  const showing = board && selected === board.duel.id ? board : null;
+  const cachedSelected = selected ? boardsRef.current.get(selected) ?? null : null;
+  const matching = selected && board?.duel.id === selected ? board : cachedSelected;
+  const showing = matching ?? (switching ? board : null);
   const menuItem = items.find((item) => item.id === menuId) ?? null;
   const confirmItem = items.find((item) => item.id === confirm?.id) ?? null;
   const confirmCopy = confirmItem && confirm
@@ -207,8 +276,10 @@ export function DuelsView({
       else await duelsApi.restore(client, id);
       if (action === "cancel" || action === "archive") {
         setSelected((current) => (current === id ? null : current));
-        if (selected === id) setBoard(null);
+        if (selectedRef.current === id) setBoard(null);
+        boardsRef.current.delete(id);
       }
+      if (action === "restore") selectDuel(id);
     }, action === "cancel" ? "Duel cancelled." : action === "leave" ? "You left this duel." : action === "archive" ? "Removed from your list." : "Duel restored.");
   };
 
@@ -240,7 +311,8 @@ export function DuelsView({
                 <button
                   type="button"
                   aria-pressed={selected === item.id}
-                  onClick={() => setSelected(item.id)}
+                  aria-busy={switching && selected === item.id}
+                  onClick={() => selectDuel(item.id)}
                   className={`min-h-11 max-w-[9.5rem] truncate px-3 text-xs font-semibold ${selected === item.id ? "text-text-1" : "text-text-3"}`}
                 >
                   {item.title}
@@ -260,6 +332,12 @@ export function DuelsView({
           })}
         </div>
       )}
+      {switching && selected && !showing && (
+        <p className="mt-2 text-xs text-text-3" role="status">Loading duel…</p>
+      )}
+      {switching && selected && showing && showing.duel.id !== selected && (
+        <p className="mt-2 text-xs text-text-3" role="status">Loading duel…</p>
+      )}
 
       {main.length === 0 && !showing && (
         <section className="panel mt-3 px-4 py-6">
@@ -272,23 +350,30 @@ export function DuelsView({
       )}
 
       {showing && (
-        <DuelArena
+        <motion.div
           key={showing.duel.id}
-          board={showing}
-          tracker={tracker}
-          commit={commit}
-          activeActivityId={activeActivityId}
-          unsynced={unsynced}
-          connectOnOpen={connectOnOpen}
-          battles={battles}
-          busy={acting}
-          onNote={setNote}
-          onAct={act}
-          onClose={() => {
-            setSelected(null);
-            setBoard(null);
-          }}
-        />
+          initial={motionPrefs.reduced ? false : { opacity: 0.78 }}
+          animate={{ opacity: 1 }}
+          transition={motionPrefs.reduced ? { duration: 0 } : { duration: DURATION.instant, ease: EASE_OUT }}
+        >
+          <DuelArena
+            board={showing}
+            tracker={tracker}
+            commit={commit}
+            activeActivityId={activeActivityId}
+            unsynced={unsynced}
+            connectOnOpen={connectOnOpen && showing.duel.id === selected}
+            battles={battles}
+            busy={acting}
+            onNote={setNote}
+            onAct={act}
+            onClose={() => {
+              setSelected(null);
+              setBoard(null);
+              setSwitching(false);
+            }}
+          />
+        </motion.div>
       )}
 
       {!showing && <BattleShowcase battles={battles} />}
@@ -303,9 +388,9 @@ export function DuelsView({
               const action = archivedDuelAction(item);
               return (
                 <li key={item.id} className="flex items-center justify-between gap-2 rounded-2xl border border-line px-3 py-2">
-                  <button type="button" onClick={() => setSelected(item.id)} className="min-w-0 text-left">
+                  <button type="button" onClick={() => selectDuel(item.id)} className="min-w-0 text-left">
                     <span className="block truncate text-sm font-semibold text-text-1">{item.title}</span>
-                    <span className="block text-xs text-text-3">{item.status === "cancelled" ? "Cancelled" : "Completed"} · {item.startsOn}</span>
+                    <span className="block text-xs text-text-3">{archivedDuelLabel(item)} · {item.startsOn}</span>
                   </button>
                   {action && (
                     <button
@@ -331,14 +416,20 @@ export function DuelsView({
           tracker={tracker}
           commit={commit}
           onClose={() => setCreating(false)}
-          onCreated={() => void loadList().catch((caught) => setError(duelError(caught)))}
+          onCreated={() => void loadList({ history: false }).catch((caught) => setError(duelError(caught)))}
         />
       )}
 
       {menuItem && (
         <Sheet label={menuItem.title} onClose={() => setMenuId(null)}>
           <p className="mt-3 text-xs text-text-3">
-            {menuItem.status === "pending" ? "This invite is still waiting." : menuItem.status === "active" ? "This duel is in progress." : "This duel is finished."}
+            {menuItem.status === "pending"
+              ? "This invite is still waiting."
+              : menuItem.memberStatus === "left"
+                ? "You left this duel. Earlier points stay."
+                : menuItem.status === "active"
+                  ? "This duel is in progress."
+                  : "This duel is finished."}
           </p>
           {duelMenuAction(menuItem) && (
             <button
