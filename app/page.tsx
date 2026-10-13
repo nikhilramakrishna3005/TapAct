@@ -46,6 +46,8 @@ import { ActivityCard } from "./components/ActivityCard";
 import { AuthProvider, useAuth } from "./components/AuthProvider";
 import { CloudSyncProvider } from "./components/CloudSync";
 import { DuelsView } from "./components/DuelsView";
+import { duelsApi } from "@/lib/duels/api";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { type AppTab, FocusDock } from "./components/FocusDock";
 import { HistoryView } from "./components/HistoryView";
 import { InsightsView } from "./components/InsightsView";
@@ -380,12 +382,20 @@ function Home() {
     setHydrated(true);
     setOnboarding(firstLaunch ? "show" : "done");
     const url = new URL(window.location.href);
-    if (url.searchParams.get("tab") === "settings") {
-      setTab("settings");
+    const requested = url.searchParams.get("tab");
+    if (requested === "settings" || requested === "duels") {
+      setTab(requested);
       url.searchParams.delete("tab");
       window.history.replaceState(window.history.state, "", url);
     }
   }, [commit]);
+
+  useEffect(() => {
+    if (!hydrated || auth.status !== "signed-in") return;
+    const client = getSupabaseBrowserClient();
+    if (!client) return;
+    void duelsApi.syncPresence(client, tracker.activeActivityId).catch(() => undefined);
+  }, [auth.status, hydrated, tracker.activeActivityId]);
 
   useEffect(() => {
     if (!isAddSheetOpen && !isManageSheetOpen && !editActivityId && onboarding !== "show") {
@@ -646,7 +656,7 @@ function Home() {
             {tab === "insights" ? (
               <InsightsView tracker={liveTracker} todayKey={todayKey} />
             ) : tab === "duels" ? (
-              <DuelsView />
+              <DuelsView tracker={tracker} commit={commit} activeActivityId={tracker.activeActivityId} />
             ) : tab === "history" ? (
               <HistoryView tracker={liveTracker} todayKey={todayKey} nowMs={nowMs} />
             ) : tab === "settings" ? (
