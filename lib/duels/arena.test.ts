@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   arenaLead,
   arenaReactions,
+  compactDuelStatus,
   dayHasMetTarget,
   friendIsLive,
   leadCopy,
@@ -19,6 +20,12 @@ describe("cinematic arena presentation", () => {
     expect(arenaLead(20, 40)).toBe("friend");
     expect(leadCopy("tie")).toBe("Tied");
     expect(leadCopy("waiting")).toBe("Waiting");
+  });
+
+  it("summarizes duel progress without changing official dates", () => {
+    expect(compactDuelStatus({ todayKey: "2026-10-10", startsOn: "2026-10-13", durationDays: 7, dayIndex: -1, completed: false })).toBe("Upcoming");
+    expect(compactDuelStatus({ todayKey: "2026-10-14", startsOn: "2026-10-13", durationDays: 7, dayIndex: 1, completed: false })).toBe("Day 2 of 7");
+    expect(compactDuelStatus({ todayKey: "2026-10-22", startsOn: "2026-10-13", durationDays: 7, dayIndex: -1, completed: true })).toBe("Completed");
   });
 
   it("splits momentum as a score share, never as health, and stays 50/50 when tied or waiting", () => {

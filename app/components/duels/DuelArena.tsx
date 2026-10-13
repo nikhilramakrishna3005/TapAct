@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { duelsApi, shareInvite, type DuelBoard } from "@/lib/duels/api";
+import { compactDuelStatus } from "@/lib/duels/arena";
 import { describeRuleChanges } from "@/lib/duels/rules";
 import { addCalendarDays } from "@/lib/duels/score";
 import type { ShowcaseBattle } from "@/lib/duels/showcase";
@@ -94,38 +95,55 @@ export function DuelArena({
     connect(challengeActivityId, id);
   };
 
+  const status = compactDuelStatus({
+    todayKey,
+    startsOn: board.duel.startsOn,
+    durationDays: board.duel.durationDays,
+    dayIndex: dayNumber,
+    completed: board.duel.final || board.duel.status === "completed",
+  });
+
   return (
-    <div className="mt-4">
-      <section className="overflow-hidden rounded-[24px] border border-line bg-ink-1 px-3 py-3">
-        <div className="flex items-start justify-between gap-3">
+    <div className="mt-2">
+      <section className="rounded-[22px] border border-line bg-ink-1 px-3 py-2">
+        <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold text-text-1">{board.duel.title}</h2>
-            <p className="text-xs text-text-3">
-              {dayNumber >= 0 ? `Day ${dayNumber + 1} of ${board.duel.durationDays}` : todayKey < board.duel.startsOn ? `Starts ${board.duel.startsOn}` : "Complete"}
-              {" · "}
-              {board.duel.startsOn} to {lastDay}
-            </p>
+            <h2 className="truncate text-sm font-semibold text-text-1">{board.duel.title}</h2>
+            <p className="text-[0.7rem] text-text-3">{status}</p>
           </div>
-          <button type="button" onClick={onClose} className="grid size-11 shrink-0 place-items-center text-xs font-medium text-text-3">Close</button>
+          <div className="flex shrink-0 items-center">
+            <details className="relative">
+              <summary className="grid size-11 cursor-pointer list-none place-items-center text-xs font-semibold text-text-3 [&::-webkit-details-marker]:hidden" aria-label="Duel details">
+                Info
+              </summary>
+              <div className="absolute right-0 top-full z-20 w-[16.5rem] rounded-2xl border border-line bg-ink-1 px-3 py-2.5 text-xs leading-relaxed text-text-3 shadow-[0_16px_40px_-24px_rgba(0,0,0,0.9)]">
+                <p className="font-medium text-text-2">{board.duel.startsOn} to {lastDay}</p>
+                {board.duel.plannedStartsOn !== board.duel.startsOn && (
+                  <p className="mt-1.5">Start moved from {board.duel.plannedStartsOn} to {board.duel.startsOn}. Time before {board.duel.startsOn} does not count.</p>
+                )}
+                {board.duel.awaitingOpponent && (
+                  <p className="mt-1.5">Points start once your friend accepts. Tracking before then does not count.</p>
+                )}
+                {board.duel.plannedStartsOn === board.duel.startsOn && !board.duel.awaitingOpponent && (
+                  <p className="mt-1.5">Official start {board.duel.startsOn}. Days use the time zone saved when you joined.</p>
+                )}
+              </div>
+            </details>
+            <button type="button" onClick={onClose} className="grid size-11 place-items-center text-xs font-medium text-text-3">Close</button>
+          </div>
         </div>
-        {board.duel.plannedStartsOn !== board.duel.startsOn && (
-          <p className="mt-2 text-xs text-text-2">Start moved from {board.duel.plannedStartsOn} to {board.duel.startsOn}. Time before {board.duel.startsOn} does not count.</p>
-        )}
-        {board.duel.awaitingOpponent && (
-          <p className="mt-2 text-xs text-text-3">Points start once your friend accepts. Tracking before then does not count.</p>
-        )}
-        {unsynced && <p className="mt-2 text-xs text-ember">Scores are provisional until tracking syncs.</p>}
+        {unsynced && <p className="mt-1.5 text-xs text-ember">Scores are provisional until tracking syncs.</p>}
         {board.you.status === "left" && (
-          <p className="mt-2 text-xs text-ember">You left this duel. Earlier points stay. You are not earning new points or sharing live status.</p>
+          <p className="mt-1.5 text-xs text-ember">You left this duel. Earlier points stay. You are not earning new points or sharing live status.</p>
         )}
         {board.friend?.status === "left" && (
-          <p className="mt-2 text-xs text-ember">{board.friend.name} left this duel. Earlier points stay. They are not earning new points, and their live activity status is hidden.</p>
+          <p className="mt-1.5 text-xs text-ember">{board.friend.name} left this duel. Earlier points stay. They are not earning new points, and their live activity status is hidden.</p>
         )}
         {board.duel.status === "cancelled" && (
-          <p className="mt-2 text-xs text-text-3">This duel was cancelled. Personal tracking was not deleted.</p>
+          <p className="mt-1.5 text-xs text-text-3">This duel was cancelled. Personal tracking was not deleted.</p>
         )}
         {unmapped.length > 0 && board.you.status === "active" && (
-          <p className="mt-2 text-xs text-volt-hi">
+          <p className="mt-1.5 text-xs text-volt-hi">
             {unmapped.map((activity) => activity.name).join(", ")} {unmapped.length === 1 ? "is" : "are"} not connected.
             <button type="button" onClick={() => setConnectId("all")} className="ml-2 min-h-11 font-semibold">Connect</button>
           </p>
@@ -166,7 +184,7 @@ export function DuelArena({
         )}
       </section>
 
-      <section className="mt-4" aria-label="Activity battles">
+      <section className="mt-2.5" aria-label="Activity battles">
         <div className="flex items-center justify-between gap-2">
           <h3 className="eyebrow">Activity battles</h3>
           {board.you.status === "active" && (board.duel.awaitingOpponent || (!board.duel.final && board.duel.status === "active")) && (

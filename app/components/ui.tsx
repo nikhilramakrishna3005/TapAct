@@ -158,18 +158,20 @@ export function ScreenHeader({
   eyebrow,
   title,
   children,
+  compact = false,
 }: {
   eyebrow: string;
   title: string;
   children?: React.ReactNode;
+  compact?: boolean;
 }) {
   return (
-    <header className="pt-2">
+    <header className={compact ? "pt-1" : "pt-2"}>
       <div className="flex items-center gap-2">
         <OrbitMark size={18} />
         <p className="eyebrow">{eyebrow}</p>
       </div>
-      <h1 className="display mt-3 text-[2rem]">{title}</h1>
+      <h1 className={`display ${compact ? "mt-1 text-[1.45rem]" : "mt-3 text-[2rem]"}`}>{title}</h1>
       {children}
     </header>
   );
