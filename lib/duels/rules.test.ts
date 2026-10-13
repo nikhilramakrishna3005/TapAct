@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPendingRuleEdit, type StoredRuleActivity } from "./rules";
+import { applyPendingRuleEdit, describeRuleChanges, reviewRuleProposal, type StoredRuleActivity } from "./rules";
 
 const existing: StoredRuleActivity[] = [
   { id: "read", name: "Read", targetMinutes: 20 },
@@ -17,6 +17,48 @@ function edit(next: { id?: string; name: string; targetMinutes: number }[], patc
     newId: () => ids.shift() ?? "added",
   });
 }
+
+describe("collaborative rule changes", () => {
+  const current = [
+    { id: "read", name: "Read", targetMinutes: 20 },
+    { id: "move", name: "Workout", targetMinutes: 30 },
+  ];
+
+  it("describes adds, renames, target changes, and removals without touching the old list", () => {
+    expect(describeRuleChanges(current, [
+      { id: "move", name: "Lift", targetMinutes: 45 },
+      { name: "Code", targetMinutes: 60 },
+    ])).toEqual([
+      { kind: "rename", from: "Workout", to: "Lift" },
+      { kind: "target", name: "Lift", from: 30, to: 45 },
+      { kind: "add", name: "Code", targetMinutes: 60 },
+      { kind: "remove", name: "Read" },
+    ]);
+    expect(current[0].name).toBe("Read");
+  });
+
+  it("requires the other active player and ignores a stale or finished proposal", () => {
+    const base = {
+      viewerId: "friend",
+      proposerId: "creator",
+      memberIds: ["creator", "friend"],
+      duelStatus: "active" as const,
+      proposalStatus: "pending" as const,
+      baseVersion: 1,
+      currentVersion: 1,
+      action: "approve" as const,
+    };
+    expect(reviewRuleProposal(base)).toEqual({ ok: true });
+    expect(reviewRuleProposal({ ...base, viewerId: "creator", action: "approve" }).ok).toBe(false);
+    expect(reviewRuleProposal({ ...base, viewerId: "outsider" }).ok).toBe(false);
+    expect(reviewRuleProposal({ ...base, duelStatus: "completed" }).ok).toBe(false);
+    expect(reviewRuleProposal({ ...base, duelStatus: "pending" }).ok).toBe(false);
+    expect(reviewRuleProposal({ ...base, currentVersion: 2 }).ok).toBe(false);
+    expect(reviewRuleProposal({ ...base, proposalStatus: "approved" }).ok).toBe(false);
+    expect(reviewRuleProposal({ ...base, viewerId: "creator", action: "withdraw" })).toEqual({ ok: true });
+    expect(reviewRuleProposal({ ...base, action: "reject" })).toEqual({ ok: true });
+  });
+});
 
 describe("pending duel rule edits", () => {
   it("renames, reorders, adds, and removes while keeping existing names and ids", () => {

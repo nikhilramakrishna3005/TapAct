@@ -14,7 +14,14 @@ export type BoardDay = {
   dayKey: string;
   points: number;
   bonus: boolean;
-  activities: { id: string; minutes: number; met: boolean }[];
+  activities: { id: string; minutes: number; met: boolean; name?: string; targetMinutes?: number }[];
+};
+
+export type DuelProposal = {
+  id: string;
+  mine: boolean;
+  activities: { id?: string; name: string; targetMinutes: number }[];
+  createdAt: string;
 };
 
 export type DuelBoard = {
@@ -30,6 +37,8 @@ export type DuelBoard = {
     awaitingOpponent: boolean;
   };
   activities: { id: string; name: string; targetMinutes: number }[];
+  rulesEffectiveOn?: string | null;
+  proposal?: DuelProposal | null;
   you: {
     name: string;
     score: number;
@@ -103,6 +112,17 @@ export const duelsApi = {
     call<void>(client, "tapact_map_duel_activity", { p_duel: duelId, p_activity: activityId, p_tracker: trackerActivityId }),
   setRules: (client: SupabaseClient, duelId: string, activities: { id?: string; name: string; targetMinutes: number }[]) =>
     call<void>(client, "tapact_set_duel_rules", { p_duel: duelId, payload: { activities } }),
+  proposeRules: (client: SupabaseClient, duelId: string, activities: { id?: string; name: string; targetMinutes: number }[]) =>
+    call<string>(client, "tapact_propose_duel_rules", { p_duel: duelId, payload: { activities } }),
+  approveProposal: async (client: SupabaseClient, proposalId: string) => {
+    const result = await call<{ effectiveOn?: string; stale?: boolean }>(client, "tapact_approve_duel_proposal", { p_proposal: proposalId });
+    if (result?.stale || !result?.effectiveOn) {
+      throw new Error("The rules changed. Review them and propose again.");
+    }
+    return result as { effectiveOn: string };
+  },
+  rejectProposal: (client: SupabaseClient, proposalId: string) => call<void>(client, "tapact_reject_duel_proposal", { p_proposal: proposalId }),
+  withdrawProposal: (client: SupabaseClient, proposalId: string) => call<void>(client, "tapact_withdraw_duel_proposal", { p_proposal: proposalId }),
   syncPresence: (client: SupabaseClient, trackerActivityId: string | null) =>
     call<void>(client, "tapact_sync_duel_presence", { p_tracker: trackerActivityId }),
 };

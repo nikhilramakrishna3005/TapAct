@@ -40,6 +40,20 @@ describe("duel migration authorization", () => {
     expect(rules).toContain("grant execute on function public.tapact_set_duel_rules(uuid, jsonb) to authenticated");
   });
 
+  it("versions duel rules and keeps client table access closed", () => {
+    const rules = readFileSync(resolve(process.cwd(), "supabase/migrations/20261013160000_tapact_duel_rule_versions.sql"), "utf8");
+    for (const table of ["tapact_duel_rule_versions", "tapact_duel_rule_items", "tapact_duel_proposals"]) {
+      expect(rules).toContain(`alter table public.${table} enable row level security`);
+      expect(rules).toContain(`alter table public.${table} force row level security`);
+      expect(rules).toContain(`revoke all on public.${table} from anon, authenticated`);
+    }
+    expect(rules).toContain("confrelid = 'public.tapact_duel_activities'::regclass");
+    expect(rules).toContain("The other player has to approve this change.");
+    expect(rules).toContain("d.status <> 'active'");
+    expect(rules).not.toContain("create or replace function public.tapact_duel_timer_minutes");
+    expect(rules).not.toMatch(/grant (insert|update|delete|select) on public\.tapact_duel/i);
+  });
+
   it("stores invite tokens only as hashes and scores timer sessions", () => {
     expect(sql).toContain("token_hash");
     expect(sql).not.toMatch(/token text not null/);
