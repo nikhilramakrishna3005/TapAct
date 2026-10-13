@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, History } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, History, Play } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   countGoalsMet,
@@ -12,6 +12,7 @@ import {
   shiftDayKey,
 } from "@/lib/insights";
 import { MS_PER_MINUTE, type TrackerState } from "@/lib/tracker";
+import { DayReplay } from "./DayReplay";
 import { OrbitTimeline } from "./OrbitTimeline";
 import {
   ActivityBreakdownRow,
@@ -46,6 +47,7 @@ export function HistoryView({
   const [direction, setDirection] = useState(0);
   const stripRef = useRef<HTMLDivElement>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
+  const [replayOpen, setReplayOpen] = useState(false);
 
   const recordedKeys = useMemo(() => getRecordedDayKeys(records), [records]);
   const stripKeys = useMemo(
@@ -192,6 +194,17 @@ export function HistoryView({
             />
           </section>
 
+          {dayTotal > 0 && (
+            <button
+              type="button"
+              onClick={() => setReplayOpen(true)}
+              className="btn btn-ghost mt-4 h-12 w-full"
+            >
+              <Play className="size-4" />
+              Replay day
+            </button>
+          )}
+
           <OrbitTimeline
             tracker={tracker}
             dayKey={safeSelectedKey}
@@ -253,6 +266,19 @@ export function HistoryView({
             )}
           </SectionCard>
         </motion.div>
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {replayOpen && (
+          <DayReplay
+            key={safeSelectedKey}
+            tracker={tracker}
+            dayKey={safeSelectedKey}
+            todayKey={todayKey}
+            nowMs={nowMs}
+            onClose={() => setReplayOpen(false)}
+          />
+        )}
       </AnimatePresence>
     </>
   );
