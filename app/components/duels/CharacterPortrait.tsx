@@ -19,35 +19,55 @@ export function CharacterPortrait({
   character,
   name,
   size = "md",
+  variant = "chip",
   className = "",
 }: {
   character: DuelCharacterPublic | null;
   name: string;
   size?: keyof typeof SIZES;
+  variant?: "chip" | "stage";
   className?: string;
 }) {
   const [broken, setBroken] = useState(false);
-  const accent = accentOf(character?.accent)?.hex ?? "#8E7BFF";
+  const accent = accentOf(character?.accent)?.hex ?? (character ? "#8E7BFF" : "#5FE3FF");
   const src = characterPortraitSrc(character);
   const label = character ? characterLabel(character) : `${name} has not chosen a character`;
+  const stage = variant === "stage";
 
   return (
     <div
-      className={`relative mx-auto shrink-0 overflow-hidden rounded-[18px] ${SIZES[size]} ${className}`}
-      style={{ boxShadow: `0 0 0 1px ${accent}55, 0 0 18px ${accent}22` }}
+      className={
+        stage
+          ? `relative isolate h-[7.5rem] w-full overflow-hidden ${className}`
+          : `relative mx-auto shrink-0 overflow-hidden rounded-[18px] ${SIZES[size]} ${className}`
+      }
+      style={stage ? undefined : { boxShadow: `0 0 0 1px ${accent}55, 0 0 18px ${accent}22` }}
     >
       <span className="sr-only">{label}</span>
       {!broken ? (
         <img
           src={src}
           alt=""
-          width={112}
-          height={112}
-          className="size-full object-cover object-[50%_16%]"
+          width={stage ? 256 : 112}
+          height={stage ? 256 : 112}
+          className={stage ? "absolute inset-0 size-full object-cover object-[50%_14%]" : "size-full object-cover object-[50%_16%]"}
           onError={() => setBroken(true)}
         />
       ) : (
         <NeutralMark accent={accent} />
+      )}
+      {stage && (
+        <>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-[#0a0a10] via-[#0a0a10]/70 to-transparent"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{ boxShadow: `inset 0 0 28px ${accent}26` }}
+          />
+        </>
       )}
     </div>
   );

@@ -9,7 +9,8 @@ import { consistencyStreak, dayPhase, type DayPhase } from "@/lib/duels/streak";
 import { addActivity, createActivityId, toggleActivity, type TrackerState } from "@/lib/tracker";
 import type { TrackerUpdate } from "@/lib/trackerStore";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { archetypeOf, type DuelCharacterPublic } from "@/lib/duels/character";
+import { archetypeOf } from "@/lib/duels/character";
+import { ArenaVersus } from "./ArenaVersus";
 import { BattleShowcase } from "./BattleShowcase";
 import { CharacterPortrait } from "./CharacterPortrait";
 import { ManageActivitiesSheet, ProposalCard } from "./ManageActivitiesSheet";
@@ -62,11 +63,12 @@ export function DuelArena({
   const mapped = new Map(board.you.mappings.map((item) => [item.challengeActivityId, item.trackerActivityId]));
   const youDay = board.youDays.find((day) => day.dayKey === selectedDay);
   const friendDay = board.friendDays.find((day) => day.dayKey === selectedDay);
+  const youToday = board.youDays.find((day) => day.dayKey === todayKey);
+  const friendToday = board.friendDays.find((day) => day.dayKey === todayKey);
   const dayNumber = board.youDays.findIndex((day) => day.dayKey === todayKey);
   const lastDay = addCalendarDays(board.duel.startsOn, board.duel.durationDays - 1);
   const youStreak = consistencyStreak(board.youDays, todayKey);
   const friendStreak = consistencyStreak(board.friendDays, todayKey);
-  const lead = !board.friend ? "waiting" : board.you.score === board.friend.score ? "tie" : board.you.score > board.friend.score ? "you" : "friend";
   const unmapped = board.activities.filter((activity) => !mapped.get(activity.id));
   const battleActivities = youDay?.activities.some((item) => item.name)
     ? youDay.activities.map((item) => ({
@@ -129,31 +131,27 @@ export function DuelArena({
           </p>
         )}
 
-        <div className="mt-3 grid grid-cols-[minmax(0,1fr)_2.25rem_minmax(0,1fr)] items-stretch gap-1">
-          <PlayerPanel name={board.you.name} score={board.you.score} streak={youStreak} leading={lead === "you"} live={null} character={board.you.character} />
-          <div className="flex flex-col items-center justify-center">
-            <p className="text-[0.65rem] font-semibold tracking-[0.16em] text-text-3">VS</p>
-            <p className={`mt-1 text-center text-[0.6rem] font-medium leading-tight ${lead === "tie" || lead === "waiting" ? "text-text-3" : lead === "you" ? "text-volt-hi" : "text-ice"}`}>
-              {lead === "waiting" ? "Open" : lead === "tie" ? "Tied" : lead === "you" ? "You lead" : "They lead"}
-            </p>
-          </div>
-          <PlayerPanel
-            name={board.friend?.name ?? "Friend"}
-            score={board.friend?.score ?? 0}
-            streak={board.friend ? friendStreak : 0}
-            leading={lead === "friend"}
-            character={board.friend?.character ?? null}
-            live={
-              board.friend?.status === "left"
-                ? "Left the duel"
-                : board.presence
-                  ? `${board.presence.name} is ${board.presence.activity.toLowerCase()}`
-                  : board.duel.awaitingOpponent
-                    ? "Invite open"
-                    : null
-            }
-          />
-        </div>
+        <ArenaVersus
+          youName={board.you.name}
+          friendName={board.friend?.name ?? "Friend"}
+          youScore={board.you.score}
+          friendScore={board.friend ? board.friend.score : null}
+          youStreak={youStreak}
+          friendStreak={board.friend ? friendStreak : 0}
+          youCharacter={board.you.character}
+          friendCharacter={board.friend?.character ?? null}
+          youStatus={board.you.status}
+          friendStatus={board.friend?.status ?? null}
+          youToday={youToday}
+          friendToday={friendToday}
+          mappings={board.you.mappings}
+          activeActivityId={activeActivityId}
+          presence={board.presence}
+          final={board.duel.final}
+          winner={board.duel.winner}
+          unsynced={unsynced}
+          awaitingOpponent={board.duel.awaitingOpponent}
+        />
         {board.presence && board.friend?.status !== "left" && activities.some((item) => item.id === mapped.get(board.presence?.activityId ?? "")) && (
           <button
             type="button"
@@ -165,11 +163,6 @@ export function DuelArena({
           >
             Start mine
           </button>
-        )}
-        {board.duel.final && (
-          <p className="mt-3 text-center text-sm font-semibold text-text-1">
-            {unsynced ? "The period has ended. This result isn't final until tracking syncs." : board.duel.winner === "tie" ? "It's a tie." : board.duel.winner === "you" ? "You won." : "Your friend won."}
-          </p>
         )}
       </section>
 
@@ -203,7 +196,7 @@ export function DuelArena({
             const canStart = selectedDay === todayKey && board.you.status === "active" && personal;
             const liveActivity = board.activities.some((item) => item.id === activity.id);
             return (
-              <article key={activity.id} className="rounded-[18px] border border-line bg-ink-1 px-3 py-3">
+              <article key={activity.id} className="rounded-[18px] border border-line bg-[linear-gradient(180deg,rgba(142,123,255,0.05),transparent_42%),#0d0d13] px-3 py-3">
                 <div className="flex items-baseline justify-between gap-2">
                   <h4 className="text-sm font-semibold text-text-1">{activity.name}</h4>
                   <p className="text-xs text-text-3">{activity.targetMinutes} min / day</p>
@@ -421,33 +414,6 @@ export function DuelArena({
           </div>
         </Sheet>
       )}
-    </div>
-  );
-}
-
-function PlayerPanel({
-  name,
-  score,
-  streak,
-  leading,
-  live,
-  character,
-}: {
-  name: string;
-  score: number;
-  streak: number;
-  leading: boolean;
-  live: string | null;
-  character: DuelCharacterPublic | null;
-}) {
-  return (
-    <div className={`min-w-0 rounded-[18px] border px-2 py-2 text-center ${leading ? "border-volt/40 bg-volt/[0.06]" : "border-line bg-ink-0"}`}>
-      <CharacterPortrait character={character} name={name} size="md" />
-      <p className="mt-1 truncate text-xs font-semibold text-text-1">{name}</p>
-      <p className="truncate text-[0.62rem] text-text-3">{character?.title ?? "Ready to appear"}</p>
-      <p className="numeric text-2xl font-semibold leading-none text-text-1">{score}</p>
-      <p className="mt-1 text-[0.65rem] text-text-3">{streak > 0 ? `${streak}-day streak` : "No streak yet"}</p>
-      {live && <p className="mt-1 truncate text-[0.65rem] text-ice">{live}</p>}
     </div>
   );
 }
