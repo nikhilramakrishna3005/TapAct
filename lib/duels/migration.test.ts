@@ -23,6 +23,14 @@ describe("duel migration authorization", () => {
     expect(sql).not.toMatch(/grant (insert|update|delete|select) on public\.tapact_duel/i);
   });
 
+  it("lets only the pending creator change shared activities", () => {
+    const rules = readFileSync(resolve(process.cwd(), "supabase/migrations/20261013150000_tapact_duel_rules.sql"), "utf8");
+    expect(rules).toContain("d.status <> 'pending'");
+    expect(rules).toContain("d.creator_id is distinct from uid");
+    expect(rules).toContain("for update");
+    expect(rules).not.toMatch(/grant (insert|update|delete|select) on public\.tapact_duel/i);
+  });
+
   it("stores invite tokens only as hashes and scores timer sessions", () => {
     expect(sql).toContain("token_hash");
     expect(sql).not.toMatch(/token text not null/);

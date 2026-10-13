@@ -101,6 +101,8 @@ export const duelsApi = {
     call<void>(client, "tapact_set_duel_prefs", { p_duel: duelId, p_share: share, p_muted: muted }),
   map: (client: SupabaseClient, duelId: string, activityId: string, trackerActivityId: string | null) =>
     call<void>(client, "tapact_map_duel_activity", { p_duel: duelId, p_activity: activityId, p_tracker: trackerActivityId }),
+  setRules: (client: SupabaseClient, duelId: string, activities: { id?: string; name: string; targetMinutes: number }[]) =>
+    call<void>(client, "tapact_set_duel_rules", { p_duel: duelId, payload: { activities } }),
   syncPresence: (client: SupabaseClient, trackerActivityId: string | null) =>
     call<void>(client, "tapact_sync_duel_presence", { p_tracker: trackerActivityId }),
 };

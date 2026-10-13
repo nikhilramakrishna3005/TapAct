@@ -40,7 +40,7 @@ export function DuelInvite({ token }: { token: string }) {
     try {
       if (kind === "accept") {
         const result = await duelsApi.accept(client, token, deviceTimeZone());
-        window.location.assign(`/?tab=duels&duel=${result.duelId}`);
+        window.location.assign(`/?tab=duels&duel=${result.duelId}&connect=1`);
         return;
       }
       await duelsApi.decline(client, token);
