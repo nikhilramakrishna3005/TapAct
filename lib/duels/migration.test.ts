@@ -54,6 +54,28 @@ describe("duel migration authorization", () => {
     expect(rules).not.toMatch(/grant (insert|update|delete|select) on public\.tapact_duel/i);
   });
 
+  it("stops empty-search-path rule edits from looking up the deferred sort constraint", () => {
+    const repair = readFileSync(resolve(process.cwd(), "supabase/migrations/20261013170000_tapact_duel_sort_constraint_lookup.sql"), "utf8");
+    const pending = readFileSync(resolve(process.cwd(), "supabase/migrations/20261013150000_tapact_duel_rules.sql"), "utf8");
+    const versions = readFileSync(resolve(process.cwd(), "supabase/migrations/20261013160000_tapact_duel_rule_versions.sql"), "utf8");
+    expect(pending).toContain("unique (duel_id, sort_order) deferrable initially deferred");
+    expect(pending).toContain("set constraints tapact_duel_activities_sort_unique deferred");
+    expect(versions).toContain("set constraints tapact_duel_activities_sort_unique deferred");
+    expect(repair).toContain("create or replace function public.tapact_set_duel_rules(p_duel uuid, payload jsonb)");
+    expect(repair).toContain("create or replace function public.tapact_duel_install_rules(p_duel uuid, payload jsonb, p_effective date)");
+    const bodies = repair.split(/create or replace function/i).slice(1);
+    expect(bodies).toHaveLength(2);
+    for (const body of bodies) {
+      expect(body).toContain("security definer");
+      expect(body).toContain("set search_path = ''");
+      expect(body.toLowerCase()).not.toContain("set constraints");
+    }
+    expect(repair).toContain("d.creator_id is distinct from uid or d.status <> 'pending'");
+    expect(repair).toContain("set name = v_activity_name, target_minutes = v_target_minutes, sort_order = v_sort_order");
+    expect(repair).toContain("set name = v_activity_name, target_minutes = v_target_minutes, sort_order = idx");
+    expect(repair).not.toMatch(/alter table|drop constraint|row level security|grant |revoke /i);
+  });
+
   it("stores invite tokens only as hashes and scores timer sessions", () => {
     expect(sql).toContain("token_hash");
     expect(sql).not.toMatch(/token text not null/);
