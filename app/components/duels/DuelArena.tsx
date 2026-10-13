@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { duelsApi, shareInvite, type DuelBoard } from "@/lib/duels/api";
-import { describeRuleChanges, type RuleChange } from "@/lib/duels/rules";
+import { describeRuleChanges } from "@/lib/duels/rules";
 import { addCalendarDays } from "@/lib/duels/score";
 import type { ShowcaseBattle } from "@/lib/duels/showcase";
 import { consistencyStreak, dayPhase, type DayPhase } from "@/lib/duels/streak";
@@ -10,6 +10,7 @@ import { addActivity, createActivityId, toggleActivity, type TrackerState } from
 import type { TrackerUpdate } from "@/lib/trackerStore";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { BattleShowcase } from "./BattleShowcase";
+import { ManageActivitiesSheet, ProposalCard } from "./ManageActivitiesSheet";
 import { Sheet } from "../ui";
 
 const RULES = [
@@ -29,6 +30,7 @@ export function DuelArena({
   unsynced,
   connectOnOpen,
   battles,
+  busy,
   onNote,
   onAct,
   onClose,
@@ -40,14 +42,16 @@ export function DuelArena({
   unsynced: boolean;
   connectOnOpen: boolean;
   battles: ShowcaseBattle[];
+  busy: boolean;
   onNote: (note: string | null) => void;
-  onAct: (work: () => Promise<void>) => Promise<void>;
+  onAct: (work: () => Promise<void>, note?: string) => Promise<void>;
   onClose: () => void;
 }) {
   const todayKey = board.you.todayKey;
   const inRange = board.youDays.some((day) => day.dayKey === todayKey);
   const [selectedDay, setSelectedDay] = useState(inRange ? todayKey : (board.youDays[0]?.dayKey ?? board.duel.startsOn));
   const [connectId, setConnectId] = useState<string | "all" | null>(connectOnOpen ? "all" : null);
+  const [managing, setManaging] = useState(false);
   const activities = tracker.activities.filter((activity) => activity.archivedAtMs === null);
   const mapped = new Map(board.you.mappings.map((item) => [item.challengeActivityId, item.trackerActivityId]));
   const youDay = board.youDays.find((day) => day.dayKey === selectedDay);
@@ -103,6 +107,15 @@ export function DuelArena({
           <p className="mt-2 text-xs text-text-3">Points start once your friend accepts. Tracking before then does not count.</p>
         )}
         {unsynced && <p className="mt-2 text-xs text-ember">Scores are provisional until tracking syncs.</p>}
+        {board.you.status === "left" && (
+          <p className="mt-2 text-xs text-ember">You left this duel. Earlier points stay. You are not earning new points or sharing live status.</p>
+        )}
+        {board.friend?.status === "left" && (
+          <p className="mt-2 text-xs text-ember">{board.friend.name} left this duel. Earlier points stay. They are not earning new points, and their live activity status is hidden.</p>
+        )}
+        {board.duel.status === "cancelled" && (
+          <p className="mt-2 text-xs text-text-3">This duel was cancelled. Personal tracking was not deleted.</p>
+        )}
         {unmapped.length > 0 && board.you.status === "active" && (
           <p className="mt-2 text-xs text-volt-hi">
             {unmapped.map((activity) => activity.name).join(", ")} {unmapped.length === 1 ? "is" : "are"} not connected.
@@ -123,10 +136,18 @@ export function DuelArena({
             score={board.friend?.score ?? 0}
             streak={board.friend ? friendStreak : 0}
             leading={lead === "friend"}
-            live={board.presence ? `${board.presence.name} is ${board.presence.activity.toLowerCase()}` : board.duel.awaitingOpponent ? "Invite open" : null}
+            live={
+              board.friend?.status === "left"
+                ? "Left the duel"
+                : board.presence
+                  ? `${board.presence.name} is ${board.presence.activity.toLowerCase()}`
+                  : board.duel.awaitingOpponent
+                    ? "Invite open"
+                    : null
+            }
           />
         </div>
-        {board.presence && activities.some((item) => item.id === mapped.get(board.presence?.activityId ?? "")) && (
+        {board.presence && board.friend?.status !== "left" && activities.some((item) => item.id === mapped.get(board.presence?.activityId ?? "")) && (
           <button
             type="button"
             className="mt-2 min-h-11 w-full text-xs font-semibold text-ice"
@@ -146,9 +167,24 @@ export function DuelArena({
       </section>
 
       <section className="mt-4" aria-label="Activity battles">
-        <h3 className="eyebrow">Activity battles</h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="eyebrow">Activity battles</h3>
+          {board.you.status === "active" && (board.duel.awaitingOpponent || (!board.duel.final && board.duel.status === "active")) && (
+            <button type="button" onClick={() => setManaging(true)} className="min-h-11 shrink-0 text-xs font-semibold text-volt-hi">
+              Manage activities
+            </button>
+          )}
+        </div>
         {board.rulesEffectiveOn && board.rulesEffectiveOn > todayKey && (
           <p className="mt-2 text-xs text-text-3">Agreed rules change on {board.rulesEffectiveOn}. This day still uses the targets in force on {selectedDay}.</p>
+        )}
+        {board.proposal && (
+          <ProposalCard
+            board={board}
+            changes={describeRuleChanges(board.activities, board.proposal.activities)}
+            busy={busy}
+            onAct={onAct}
+          />
         )}
         <div className="mt-2 space-y-2">
           {battleActivities.map((activity) => {
@@ -158,6 +194,7 @@ export function DuelArena({
             const personal = activities.find((item) => item.id === trackerId);
             const tracking = trackerId !== null && trackerId === activeActivityId;
             const canStart = selectedDay === todayKey && board.you.status === "active" && personal;
+            const liveActivity = board.activities.some((item) => item.id === activity.id);
             return (
               <article key={activity.id} className="rounded-[18px] border border-line bg-ink-1 px-3 py-3">
                 <div className="flex items-baseline justify-between gap-2">
@@ -168,13 +205,12 @@ export function DuelArena({
                   <BattleBar label="You" minutes={yours?.minutes ?? 0} target={activity.targetMinutes} met={yours?.met ?? false} dayKey={selectedDay} todayKey={todayKey} tone="volt" />
                   <BattleBar label={board.friend?.name ?? "Friend"} minutes={theirs?.minutes ?? 0} target={activity.targetMinutes} met={theirs?.met ?? false} dayKey={selectedDay} todayKey={todayKey} tone="ice" />
                 </div>
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <p className="truncate text-[0.7rem] text-text-3">{personal ? personal.name : "Not connected"}</p>
+                <div className="mt-2 flex items-center justify-end gap-2">
                   {canStart ? (
                     <button type="button" onClick={() => commit((base) => toggleActivity(base, personal.id, Date.now()))} className="min-h-11 shrink-0 rounded-full px-3 text-xs font-semibold text-ice">
                       {tracking ? "Pause" : "Start"}
                     </button>
-                  ) : !trackerId && board.you.status === "active" && board.activities.some((item) => item.id === activity.id) ? (
+                  ) : !trackerId && board.you.status === "active" && liveActivity ? (
                     <button type="button" onClick={() => setConnectId(activity.id)} className="min-h-11 shrink-0 rounded-full px-3 text-xs font-semibold text-volt-hi">
                       Connect activity
                     </button>
@@ -186,14 +222,6 @@ export function DuelArena({
         </div>
         <p className="mt-2 text-[0.7rem] text-text-3">Extra time past a target fills the bar and does not add points.</p>
       </section>
-
-      {!board.duel.awaitingOpponent && !board.duel.final && board.you.status === "active" && (
-        <SharedActivities
-          key={`${board.activities.map((activity) => `${activity.id}:${activity.name}:${activity.targetMinutes}`).join("|")}|${board.proposal?.id ?? "none"}`}
-          board={board}
-          onAct={onAct}
-        />
-      )}
 
       <section className="mt-4" aria-label="Battle progress">
         <h3 className="eyebrow">Battle progress</h3>
@@ -260,6 +288,7 @@ export function DuelArena({
             <span>Share when I'm tracking a duel activity</span>
             <input
               type="checkbox"
+              disabled={board.you.status !== "active"}
               checked={board.you.shareLive}
               onChange={(event) => {
                 const share = event.target.checked;
@@ -276,6 +305,7 @@ export function DuelArena({
             <span>Mute their live status</span>
             <input
               type="checkbox"
+              disabled={board.you.status !== "active"}
               checked={board.you.muted}
               onChange={(event) => {
                 const muted = event.target.checked;
@@ -294,76 +324,37 @@ export function DuelArena({
               {board.activities.map((activity) => <li key={activity.id}>{activity.name}: {activity.targetMinutes} min / day</li>)}
             </ul>
           </details>
-          {board.duel.awaitingOpponent ? (
-            <RuleEditor
-              key={board.activities.map((activity) => `${activity.id}:${activity.name}:${activity.targetMinutes}`).join("|")}
-              activities={board.activities}
-              onSave={(next) => {
-                void onAct(async () => {
-                  const client = getSupabaseBrowserClient();
-                  if (!client) return;
-                  await duelsApi.setRules(client, board.duel.id, next);
-                });
-              }}
-            />
-          ) : board.duel.final ? (
-            <p className="text-xs text-text-3">This duel is finished. Shared activities stay as they ended.</p>
-          ) : null}
           {board.duel.awaitingOpponent && (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="btn btn-ghost h-11 flex-1"
-                onClick={() => {
-                  void onAct(async () => {
-                    const client = getSupabaseBrowserClient();
-                    if (!client) return;
-                    const issued = await duelsApi.reissue(client, board.duel.id);
-                    const result = await shareInvite(issued.token, board.duel.title);
-                    onNote(result === "copied" ? "New invite link copied." : "New invite shared.");
-                  });
-                }}
-              >
-                New invite link
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost h-11 flex-1"
-                onClick={() => {
-                  if (!window.confirm("Revoke this invite? Your friend won't be able to join with the current link.")) return;
-                  void onAct(async () => {
-                    const client = getSupabaseBrowserClient();
-                    if (!client) return;
-                    await duelsApi.revoke(client, board.duel.id);
-                  });
-                }}
-              >
-                Revoke
-              </button>
-            </div>
-          )}
-          {board.you.status === "active" && (
             <button
               type="button"
-              className="min-h-11 text-sm font-medium text-danger"
+              disabled={busy}
+              className="btn btn-ghost h-11 w-full"
               onClick={() => {
-                const message = board.duel.awaitingOpponent
-                  ? "Leaving cancels this duel and revokes the invite."
-                  : "Leaving stops new points for you. Points already earned stay, and your friend can finish.";
-                if (!window.confirm(message)) return;
                 void onAct(async () => {
                   const client = getSupabaseBrowserClient();
                   if (!client) return;
-                  await duelsApi.leave(client, board.duel.id);
-                  onClose();
+                  const issued = await duelsApi.reissue(client, board.duel.id);
+                  const result = await shareInvite(issued.token, board.duel.title);
+                  onNote(result === "copied" ? "New invite link copied." : "New invite shared.");
                 });
               }}
             >
-              Leave duel
+              New invite link
             </button>
           )}
         </div>
       </details>
+
+      {managing && (
+        <ManageActivitiesSheet
+          board={board}
+          tracker={tracker}
+          commit={commit}
+          busy={busy}
+          onAct={onAct}
+          onClose={() => setManaging(false)}
+        />
+      )}
 
       {connectTargets.length > 0 && connectId && (
         <Sheet label="Connect activity" onClose={() => setConnectId(null)}>
@@ -452,248 +443,6 @@ function BattleBar({
       <p className="mt-1 text-[0.65rem] text-text-3">{minutes}/{target} min</p>
     </div>
   );
-}
-
-function RuleEditor({
-  activities,
-  onSave,
-}: {
-  activities: { id: string; name: string; targetMinutes: number }[];
-  onSave: (activities: { id?: string; name: string; targetMinutes: number }[]) => void;
-}) {
-  const [rows, setRows] = useState(activities.map((activity) => ({ ...activity })));
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <form
-      className="space-y-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (rows.length < 1 || rows.length > 3) {
-          setError("Choose 1 to 3 activities.");
-          return;
-        }
-        for (const row of rows) {
-          if (row.name.trim().length < 2 || row.targetMinutes < 5 || row.targetMinutes > 240) {
-            setError("Each activity needs a name and a target of 5–240 minutes.");
-            return;
-          }
-        }
-        setError(null);
-        onSave(rows.map((row) => ({ id: row.id || undefined, name: row.name.trim(), targetMinutes: row.targetMinutes })));
-      }}
-    >
-      <p className="eyebrow">Shared activities</p>
-      {rows.map((row, index) => (
-        <div key={row.id || index} className="flex gap-2">
-          <input value={row.name} maxLength={36} aria-label={`Activity ${index + 1}`} onChange={(event) => setRows((current) => current.map((item, i) => i === index ? { ...item, name: event.target.value } : item))} className="field" />
-          <input type="number" min={5} max={240} value={row.targetMinutes} aria-label={`Target ${index + 1}`} onChange={(event) => setRows((current) => current.map((item, i) => i === index ? { ...item, targetMinutes: Number(event.target.value) } : item))} className="field numeric w-20" />
-          {rows.length > 1 && (
-            <button type="button" aria-label={`Remove ${row.name || "activity"}`} className="min-h-11 shrink-0 px-2 text-xs text-text-3" onClick={() => setRows((current) => current.filter((_, i) => i !== index))}>Remove</button>
-          )}
-        </div>
-      ))}
-      {rows.length < 3 && (
-        <button type="button" className="text-xs font-medium text-text-2" onClick={() => setRows((current) => [...current, { id: "", name: "", targetMinutes: 20 }])}>Add activity</button>
-      )}
-      {error && <p role="alert" className="text-xs text-danger">{error}</p>}
-      <button type="submit" className="btn btn-ghost h-11 w-full">Save rules</button>
-    </form>
-  );
-}
-
-function SharedActivities({
-  board,
-  onAct,
-}: {
-  board: DuelBoard;
-  onAct: (work: () => Promise<void>) => Promise<void>;
-}) {
-  const proposal = board.proposal ?? null;
-  const [rows, setRows] = useState(board.activities.map((activity) => ({ id: activity.id, name: activity.name, targetMinutes: activity.targetMinutes })));
-  const [adding, setAdding] = useState(false);
-  const [draftName, setDraftName] = useState("");
-  const [draftMinutes, setDraftMinutes] = useState(20);
-  const [error, setError] = useState<string | null>(null);
-  const changes = proposal ? describeRuleChanges(board.activities, proposal.activities) : [];
-
-  const propose = () => {
-    if (rows.length < 1 || rows.length > 3) {
-      setError("Choose 1 to 3 activities.");
-      return;
-    }
-    const next = rows.map((row) => ({ id: row.id || undefined, name: row.name.trim(), targetMinutes: row.targetMinutes }));
-    for (const row of next) {
-      if (row.name.length < 2 || row.targetMinutes < 5 || row.targetMinutes > 240) {
-        setError("Each activity needs a name and a target of 5–240 minutes.");
-        return;
-      }
-    }
-    if (describeRuleChanges(board.activities, next).length === 0) {
-      setError("Nothing changed.");
-      return;
-    }
-    setError(null);
-    void onAct(async () => {
-      const client = getSupabaseBrowserClient();
-      if (!client) return;
-      await duelsApi.proposeRules(client, board.duel.id, next);
-    });
-  };
-
-  return (
-    <section className="mt-4" aria-label="Shared activities">
-      <h3 className="eyebrow">Shared activities</h3>
-      {board.rulesEffectiveOn && board.rulesEffectiveOn > board.you.todayKey && (
-        <p className="mt-2 text-xs text-text-3">Agreed rules change on {board.rulesEffectiveOn}. Days before that keep their previous targets and points.</p>
-      )}
-      {proposal ? (
-        <div className="mt-2 rounded-[18px] border border-line bg-ink-1 px-3 py-3">
-          <p className="text-sm font-semibold text-text-1">Pending changes</p>
-          <p className="mt-1 text-xs text-text-3">{proposal.mine ? "Waiting for your friend to approve." : "Your friend proposed these changes."}</p>
-          <ul className="mt-2 space-y-1 text-sm text-text-1">
-            {changes.length === 0 && <li>The proposed list matches the current rules.</li>}
-            {changes.map((change) => (
-              <li key={changeKey(change)}>{changeLabel(change)}</li>
-            ))}
-          </ul>
-          <p className="mt-2 text-xs leading-5 text-text-3">If approved, the new rules start on the next challenge day that has not begun for either of you. Days already started keep their current points.</p>
-          <div className="mt-3 flex gap-2">
-            {proposal.mine ? (
-              <button
-                type="button"
-                className="btn btn-ghost h-11 flex-1"
-                onClick={() => {
-                  void onAct(async () => {
-                    const client = getSupabaseBrowserClient();
-                    if (!client) return;
-                    await duelsApi.withdrawProposal(client, proposal.id);
-                  });
-                }}
-              >
-                Withdraw
-              </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="btn btn-ghost h-11 flex-1"
-                  onClick={() => {
-                    void onAct(async () => {
-                      const client = getSupabaseBrowserClient();
-                      if (!client) return;
-                      await duelsApi.rejectProposal(client, proposal.id);
-                    });
-                  }}
-                >
-                  Reject
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary h-11 flex-1"
-                  onClick={() => {
-                    void onAct(async () => {
-                      const client = getSupabaseBrowserClient();
-                      if (!client) return;
-                      await duelsApi.approveProposal(client, proposal.id);
-                    });
-                  }}
-                >
-                  Approve
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="mt-2 space-y-2">
-          <p className="text-xs leading-5 text-text-3">Renaming or changing a target stays on the duel. Your Today activities keep their own names and goals. Removing a shared activity leaves your Today activity and its history in place.</p>
-          {rows.map((row, index) => (
-            <div key={row.id || `new-${index}`} className="flex gap-2">
-              <input
-                value={row.name}
-                maxLength={36}
-                aria-label={`Shared activity ${index + 1}`}
-                onChange={(event) => setRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))}
-                className="field"
-              />
-              <input
-                type="number"
-                min={5}
-                max={240}
-                value={row.targetMinutes}
-                aria-label={`Daily target ${index + 1}`}
-                onChange={(event) => setRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, targetMinutes: Number(event.target.value) } : item))}
-                className="field numeric w-20"
-              />
-              <button
-                type="button"
-                className="min-h-11 shrink-0 px-2 text-xs font-medium text-text-3"
-                onClick={() => {
-                  const label = row.name.trim() || "this activity";
-                  if (!window.confirm(`Remove ${label} from the duel? Your Today activity and its history stay. Your friend has to approve.`)) return;
-                  setRows((current) => current.filter((_, itemIndex) => itemIndex !== index));
-                }}
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-          {adding ? (
-            <div className="rounded-[16px] border border-line px-3 py-3">
-              <div className="flex gap-2">
-                <input value={draftName} onChange={(event) => setDraftName(event.target.value)} maxLength={36} placeholder="Activity name" aria-label="New shared activity" className="field" />
-                <input type="number" min={5} max={240} value={draftMinutes} onChange={(event) => setDraftMinutes(Number(event.target.value))} aria-label="New shared daily minutes" className="field numeric w-20" />
-              </div>
-              <div className="mt-2 flex gap-2">
-                <button type="button" className="btn btn-ghost h-11 flex-1" onClick={() => setAdding(false)}>Cancel</button>
-                <button
-                  type="button"
-                  className="btn btn-primary h-11 flex-1"
-                  onClick={() => {
-                    const name = draftName.trim();
-                    if (name.length < 2 || draftMinutes < 5 || draftMinutes > 240) {
-                      setError("Each activity needs a name and a target of 5–240 minutes.");
-                      return;
-                    }
-                    if (rows.length >= 3) {
-                      setError("A duel can include up to 3 activities.");
-                      return;
-                    }
-                    setRows((current) => [...current, { id: "", name, targetMinutes: draftMinutes }]);
-                    setDraftName("");
-                    setDraftMinutes(20);
-                    setAdding(false);
-                    setError(null);
-                  }}
-                >
-                  Add
-                </button>
-              </div>
-              <p className="mt-2 text-xs text-text-3">This does not add the activity to your friend's Today list. After they approve, they can add it to their own activities.</p>
-            </div>
-          ) : rows.length < 3 ? (
-            <button type="button" onClick={() => setAdding(true)} className="min-h-11 text-sm font-medium text-volt-hi">Add activity</button>
-          ) : null}
-          {error && <p role="alert" className="text-xs text-danger">{error}</p>}
-          <button type="button" onClick={propose} className="btn btn-ghost h-11 w-full">Propose changes</button>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function changeLabel(change: RuleChange): string {
-  if (change.kind === "add") return `Add ${change.name} · ${change.targetMinutes} min / day`;
-  if (change.kind === "remove") return `Remove ${change.name}`;
-  if (change.kind === "rename") return `Rename ${change.from} to ${change.to}`;
-  return `Change ${change.name} from ${change.from} to ${change.to} min / day`;
-}
-
-function changeKey(change: RuleChange): string {
-  if (change.kind === "add") return `add:${change.name}:${change.targetMinutes}`;
-  if (change.kind === "remove") return `remove:${change.name}`;
-  if (change.kind === "rename") return `rename:${change.from}:${change.to}`;
-  return `target:${change.name}:${change.from}:${change.to}`;
 }
 
 function initials(name: string): string {

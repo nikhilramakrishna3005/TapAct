@@ -40,6 +40,25 @@ describe("duel migration authorization", () => {
     expect(rules).toContain("grant execute on function public.tapact_set_duel_rules(uuid, jsonb) to authenticated");
   });
 
+  it("archives duels per member and keeps client table access closed", () => {
+    const management = readFileSync(resolve(process.cwd(), "supabase/migrations/20261013220000_tapact_duel_management.sql"), "utf8");
+    expect(management).toContain("add column if not exists hidden_at timestamptz");
+    expect(management).toContain("create or replace function public.tapact_archive_duel");
+    expect(management).toContain("create or replace function public.tapact_restore_duel");
+    expect(management).toContain("Only finished or cancelled duels can be removed from your list.");
+    expect(management).toContain("where duel_id = p_duel and user_id = uid");
+    expect(management).toContain("'archived', m.hidden_at is not null");
+    expect(management).toContain("'creator', d.creator_id = uid");
+    expect(management).toContain("friend.status = 'active' and friend.share_live");
+    expect(management).toContain("trackerActivityId");
+    expect(management).toContain("prop.proposer_id");
+    expect(management).not.toContain("create or replace function public.tapact_duel_timer_minutes");
+    expect(management).not.toContain("create or replace function public.tapact_duel_member_score");
+    expect(management).not.toMatch(/grant (insert|update|delete|select) on public\.tapact_duel/i);
+    expect(management).toContain("grant execute on function public.tapact_archive_duel(uuid) to authenticated");
+    expect(management).toContain("grant execute on function public.tapact_restore_duel(uuid) to authenticated");
+  });
+
   it("versions duel rules and keeps client table access closed", () => {
     const rules = readFileSync(resolve(process.cwd(), "supabase/migrations/20261013160000_tapact_duel_rule_versions.sql"), "utf8");
     for (const table of ["tapact_duel_rule_versions", "tapact_duel_rule_items", "tapact_duel_proposals"]) {
