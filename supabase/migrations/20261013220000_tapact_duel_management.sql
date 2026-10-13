@@ -2,6 +2,9 @@
 -- Hidden rows are per member. Shared duel records, scores, and tracking stay.
 -- Cancel and leave keep using the existing authorization paths. This does not
 -- change point values, official start dates, or Time Rescue handling.
+-- Prerequisite: 20261013170000_tapact_duel_sort_constraint_lookup.sql already
+-- removed unqualified SET CONSTRAINTS from rule-edit functions. Do not add it
+-- back; empty search_path cannot see that constraint.
 
 begin;
 
@@ -234,8 +237,6 @@ begin
       seen := seen || act_id;
     end if;
   end loop;
-
-  set constraints tapact_duel_activities_sort_unique deferred;
 
   for item in select value as spec from jsonb_array_elements(payload -> 'activities')
   loop
