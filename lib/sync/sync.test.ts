@@ -13,6 +13,7 @@ import { commitTrackerUpdate, type TrackerUpdate } from "../trackerStore";
 import { captureCommit, recordCommit } from "./capture";
 import { adoptAccount, detachForRestore, importLocalData, runSync, type SyncDeps } from "./engine";
 import {
+  applySnapshot,
   type Baseline,
   computeDailyRecords,
   mergeActivity,
@@ -29,6 +30,7 @@ import {
   loadStash,
   loadSyncMeta,
   removeConfirmed,
+  sanitizeSyncActivity,
   saveSyncMeta,
   type SyncMeta,
 } from "./state";
@@ -395,6 +397,43 @@ describe("sync engine", () => {
       expect(activities.find((item) => item.id === "reading")?.goalMinutes).toBe(90);
       expect(activities.find((item) => item.id === "gym")).toMatchObject({ name: "Gym time", archivedAtMs: T0 + 2 * MIN });
     }
+  });
+
+  it("syncs life areas across devices with the newest edit winning, including back to Unassigned", async () => {
+    clock.now = T0;
+    const server = new FakeServer();
+    const phone = createDevice(server);
+    const laptop = createDevice(server);
+    for (const device of [phone, laptop]) {
+      device.signIn(ADA.userId);
+      await adoptAccount(device.deps(), ADA, { keepCurrent: false });
+    }
+    clock.now = T0 + MIN;
+    phone.commit((base) => updateActivity(base, "coding", { category: "work" }));
+    laptop.commit((base) => updateActivity(base, "gym", { category: "health" }));
+    await runSync(phone.deps(), ADA);
+    await runSync(laptop.deps(), ADA);
+    await runSync(phone.deps(), ADA);
+    for (const device of [phone, laptop]) {
+      const activities = device.state().activities;
+      expect(activities.find((item) => item.id === "coding")?.category).toBe("work");
+      expect(activities.find((item) => item.id === "gym")?.category).toBe("health");
+    }
+
+    clock.now = T0 + 2 * MIN;
+    laptop.commit((base) => updateActivity(base, "coding", { category: null }));
+    await runSync(laptop.deps(), ADA);
+    await runSync(phone.deps(), ADA);
+    expect(phone.state().activities.find((item) => item.id === "coding")?.category).toBeNull();
+  });
+
+  it("keeps local life areas when the server predates categories", () => {
+    const local = { ...createDefaultTrackerState(T0), activities: createDefaultTrackerState(T0).activities.map((item) => ({ ...item, category: item.id === "coding" ? ("work" as const) : null })) };
+    const legacy: SyncActivity[] = local.activities.map(({ category: _category, ...activity }) => ({ ...activity, updatedAtMs: 5, deviceId: "x" }));
+    const applied = applySnapshot(local, { activities: legacy, entries: [], baselines: [] }, T0, "x", null);
+    expect(applied.activities.find((item) => item.id === "coding")?.category).toBe("work");
+    expect(sanitizeSyncActivity({ ...legacy[0] })?.category).toBeUndefined();
+    expect(sanitizeSyncActivity({ ...legacy[0], category: "nope" })?.category).toBeNull();
   });
 
   it("never uploads one account's data to another and sets it aside on switch", async () => {

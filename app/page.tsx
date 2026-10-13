@@ -37,6 +37,7 @@ import {
   toggleActivity,
   type Activity,
   type ActivityIconName,
+  type LifeCategoryId,
   type TrackerState,
   updateActivity,
 } from "@/lib/tracker";
@@ -49,6 +50,8 @@ import {
 } from "@/lib/trackerStore";
 import { getInitials } from "@/lib/auth/account";
 import { recordCommit, SYNC_DIRTY_EVENT } from "@/lib/sync/capture";
+import { areaOf, getLifeArea } from "@/lib/lifeBalance";
+import { LifeAreaPicker } from "./components/LifeBalance";
 import { ActivityCard } from "./components/ActivityCard";
 import { AuthProvider, useAuth } from "./components/AuthProvider";
 import { CloudSyncProvider } from "./components/CloudSync";
@@ -104,9 +107,10 @@ type ActivityDraft = {
   icon: ActivityIconName;
   color: string;
   goal: string;
+  category: LifeCategoryId | null;
 };
 
-const EMPTY_DRAFT: ActivityDraft = { name: "", icon: "briefcase", color: COLOR_OPTIONS[0], goal: "" };
+const EMPTY_DRAFT: ActivityDraft = { name: "", icon: "briefcase", color: COLOR_OPTIONS[0], goal: "", category: null };
 
 function validateDraft(draft: ActivityDraft): { error: string } | { name: string; goalMinutes: number | null } {
   const name = draft.name.trim();
@@ -223,6 +227,11 @@ function ActivityForm({
           className="field"
         />
       </label>
+
+      <LifeAreaPicker
+        value={draft.category}
+        onChange={(category) => setDraft((current) => ({ ...current, category }))}
+      />
 
       {error && (
         <p role="alert" className="text-xs text-danger">
@@ -540,6 +549,7 @@ function Home() {
       icon: activity.iconKey,
       color: activity.color,
       goal: activity.goalMinutes ? String(activity.goalMinutes) : "",
+      category: activity.category,
     });
     setEditError(null);
   }, []);
@@ -582,6 +592,7 @@ function Home() {
           color: draft.color,
           goalMinutes: result.goalMinutes,
           cue: "Custom activity",
+          category: draft.category,
         }),
       );
       closeAddSheet();
@@ -607,6 +618,7 @@ function Home() {
           iconKey: editDraft.icon,
           color: editDraft.color,
           goalMinutes: result.goalMinutes,
+          category: editDraft.category,
         }),
       );
       closeEditSheet();
@@ -938,6 +950,8 @@ function Home() {
                           <p className="truncate text-sm font-semibold text-text-1">{activity.name}</p>
                           <p className="text-xs text-text-3">
                             {activity.goalMinutes ? `Goal ${activity.goalMinutes}m` : "No goal"}
+                            {" · "}
+                            {getLifeArea(areaOf(activity)).label}
                             {" · "}
                             {formatSummaryDuration(elapsedByActivity[activity.id] ?? 0)} today
                           </p>

@@ -14,6 +14,7 @@ import {
 } from "@/lib/insights";
 import { DURATION, EASE_OUT } from "@/lib/motion";
 import type { TrackerState } from "@/lib/tracker";
+import { LifeBalanceSection } from "./LifeBalance";
 import {
   ActivityBreakdownRow,
   EmptyState,
@@ -194,6 +195,8 @@ export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; tod
           </>
         )}
       </SectionCard>
+
+      <LifeBalanceSection tracker={tracker} todayKey={todayKey} />
 
       <SectionCard
         title="Goals"

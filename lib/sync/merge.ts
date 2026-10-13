@@ -2,6 +2,7 @@ import {
   type Activity,
   type ActivityIconName,
   type DailyRecords,
+  type LifeCategoryId,
   processActiveTimer,
   splitAcrossDays,
   type TrackerState,
@@ -16,6 +17,8 @@ export type SyncActivity = {
   goalMinutes: number | null;
   cue: string;
   archivedAtMs: number | null;
+  /** Undefined when the server predates life categories; the device keeps its own then. */
+  category?: LifeCategoryId | null;
   updatedAtMs: number;
   deviceId: string;
 };
@@ -72,7 +75,7 @@ export function toSyncActivity(activity: Activity, updatedAtMs: number, deviceId
   return { ...activity, updatedAtMs, deviceId };
 }
 
-export function toActivity(activity: SyncActivity): Activity {
+export function toActivity(activity: SyncActivity, localCategory: LifeCategoryId | null = null): Activity {
   return {
     id: activity.id,
     name: activity.name,
@@ -81,17 +84,22 @@ export function toActivity(activity: SyncActivity): Activity {
     goalMinutes: activity.goalMinutes,
     cue: activity.cue,
     archivedAtMs: activity.archivedAtMs,
+    category: activity.category === undefined ? localCategory : activity.category,
   };
 }
 
-export function sameActivityFields(a: Activity, b: Activity): boolean {
+export function sameActivityFields(
+  a: Omit<Activity, "category"> & { category?: LifeCategoryId | null },
+  b: Omit<Activity, "category"> & { category?: LifeCategoryId | null },
+): boolean {
   return (
     a.name === b.name &&
     a.iconKey === b.iconKey &&
     a.color === b.color &&
     a.goalMinutes === b.goalMinutes &&
     a.cue === b.cue &&
-    a.archivedAtMs === b.archivedAtMs
+    a.archivedAtMs === b.archivedAtMs &&
+    (a.category ?? null) === (b.category ?? null)
   );
 }
 
@@ -279,7 +287,10 @@ export function applySnapshot(
   const running = runningSegment(settled, deviceId, floor);
   const entries = running ? mergeEntryLists(snapshot.entries, [running]) : snapshot.entries;
 
-  const merged = new Map(snapshot.activities.map((activity) => [activity.id, toActivity(activity)]));
+  const local = new Map(settled.activities.map((activity) => [activity.id, activity]));
+  const merged = new Map(
+    snapshot.activities.map((activity) => [activity.id, toActivity(activity, local.get(activity.id)?.category ?? null)]),
+  );
   const activities: Activity[] = settled.activities.map((activity) => merged.get(activity.id) ?? activity);
   const known = new Set(activities.map((activity) => activity.id));
   const added = [...merged.values()].filter((activity) => !known.has(activity.id)).sort((a, b) => a.id.localeCompare(b.id));

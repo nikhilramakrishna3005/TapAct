@@ -2,6 +2,7 @@ import {
   type Activity,
   type ActivityIconName,
   DEFAULT_ACTIVITIES,
+  isLifeCategoryId,
   loadTrackerState,
   STORAGE_KEY_V3,
   type TrackerState,
@@ -116,6 +117,7 @@ export function sanitizeSyncActivity(value: unknown): SyncActivity | null {
     goalMinutes: goal,
     cue: typeof value.cue === "string" ? value.cue.slice(0, 48) : "",
     archivedAtMs: isFiniteNumber(value.archivedAtMs) && value.archivedAtMs >= 0 ? value.archivedAtMs : null,
+    category: value.category === undefined ? undefined : isLifeCategoryId(value.category) ? value.category : null,
     updatedAtMs: isFiniteNumber(value.updatedAtMs) && value.updatedAtMs >= 0 ? value.updatedAtMs : 0,
     deviceId: typeof value.deviceId === "string" ? value.deviceId.slice(0, 64) : "",
   };
