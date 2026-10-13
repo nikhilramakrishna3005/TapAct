@@ -124,6 +124,7 @@ export function DuelsView({
       await refresh();
     } catch (caught) {
       setError(duelError(caught));
+      if (selected) void loadBoard(selected).catch(() => undefined);
     }
   };
 

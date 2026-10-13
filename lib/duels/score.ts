@@ -19,6 +19,9 @@ export type ScoreSession = {
 
 export type ScoreActivity = { id: string; targetMinutes: number; trackerActivityId: string | null };
 
+/** Shared rules that apply from `effectiveOn` until a later version. */
+export type RuleVersion = { effectiveOn: string; activities: ScoreActivity[] };
+
 export type ScoreMember = {
   id: string;
   timeZone: string;
@@ -107,24 +110,57 @@ function splitZoned(startMs: number, endMs: number, timeZone: string): { dayKey:
   return spans;
 }
 
+/** Rules in force on a challenge day. Later versions replace earlier ones on their effective date. */
+export function rulesForDay(versions: RuleVersion[], dayKey: string): ScoreActivity[] {
+  const ordered = [...versions].sort((a, b) => (a.effectiveOn < b.effectiveOn ? -1 : a.effectiveOn > b.effectiveOn ? 1 : 0));
+  let chosen = ordered[0]?.activities ?? [];
+  for (const version of ordered) {
+    if (version.effectiveOn <= dayKey) chosen = version.activities;
+  }
+  return chosen;
+}
+
+/**
+ * First challenge day a newly approved rule may use. It is the next date that has
+ * not started in any participant's saved time zone, and not before the official start.
+ * Returns null when that date is after the duel.
+ */
+export function nextRuleDay(nowMs: number, zones: string[], startsOn: string, durationDays: number): string | null {
+  if (zones.length === 0) return null;
+  const tomorrow = zones.reduce((latest, zone) => {
+    const next = addCalendarDays(zonedDayKey(nowMs, zone), 1);
+    return next > latest ? next : latest;
+  }, "0000-00-00");
+  const effective = tomorrow > startsOn ? tomorrow : startsOn;
+  if (effective >= addCalendarDays(startsOn, durationDays)) return null;
+  return effective;
+}
+
 /**
  * Scores one participant from timer sessions only.
  * Manual or deleted sessions never count. Days are the agreed calendar dates
  * interpreted in the member's frozen time zone. Minutes above a target add no points.
+ * When rule versions are passed, each day uses the targets and activity set in force that day.
  */
 export function scoreMember(
   member: ScoreMember,
   startsOn: string,
   durationDays: number,
+  versions?: RuleVersion[],
 ): MemberScore {
   const days = challengeDayKeys(startsOn, durationDays);
   const daySet = new Set(days);
+  const schedule = versions && versions.length > 0 ? versions : [{ effectiveOn: startsOn, activities: member.activities }];
   const windowStart = startOfZonedDay(startsOn, member.timeZone);
   const windowEnd = startOfZonedDay(addCalendarDays(startsOn, durationDays), member.timeZone);
   const clipEnd = member.leftAtMs != null ? Math.min(windowEnd, member.leftAtMs) : windowEnd;
+  const catalog = new Map<string, ScoreActivity>();
+  for (const version of schedule) {
+    for (const activity of version.activities) catalog.set(activity.id, activity);
+  }
 
   const minutes = new Map<string, number>();
-  for (const activity of member.activities) {
+  for (const activity of catalog.values()) {
     if (!activity.trackerActivityId) continue;
     const intervals = member.sessions
       .filter(
@@ -149,14 +185,15 @@ export function scoreMember(
 
   let points = 0;
   const dayScores = days.map((dayKey): DayScore => {
+    const dayActivities = rulesForDay(schedule, dayKey);
     let metCount = 0;
-    const activities = member.activities.map((activity): DayActivityScore => {
+    const activities = dayActivities.map((activity): DayActivityScore => {
       const tracked = Math.floor((minutes.get(`${dayKey}|${activity.id}`) ?? 0) / MINUTE);
       const met = activity.trackerActivityId != null && tracked >= activity.targetMinutes;
       if (met) metCount += 1;
       return { id: activity.id, minutes: tracked, met };
     });
-    const bonus = member.activities.length > 0 && metCount === member.activities.length;
+    const bonus = dayActivities.length > 0 && metCount === dayActivities.length;
     const dayPoints = metCount * TARGET_POINTS + (bonus ? PERFECT_DAY_POINTS : 0);
     points += dayPoints;
     return { dayKey, points: dayPoints, bonus, activities };

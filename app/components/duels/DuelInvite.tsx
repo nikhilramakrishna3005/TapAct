@@ -73,6 +73,7 @@ export function DuelInvite({ token }: { token: string }) {
           <ul className="mt-4 space-y-1.5 text-xs leading-relaxed text-text-3">
             {preview.rules?.map((rule) => <li key={rule}>{rule}</li>)}
           </ul>
+          <p className="mt-3 text-xs leading-5 text-text-3">After you accept, connect each activity to one of yours. A matching name is not connected for you.</p>
           {preview.state !== "open" && <p className="mt-4 text-sm text-text-2">This invite is {preview.state}.</p>}
           {preview.creator && preview.state === "open" && <p className="mt-4 text-sm text-text-2">This is your invite. Share it from the Duels tab.</p>}
           {preview.state === "open" && !preview.creator && auth.status === "signed-out" && (

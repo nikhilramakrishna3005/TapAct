@@ -12,8 +12,6 @@ import { Sheet } from "../ui";
 
 type Step = "setup" | "confirm" | "link";
 
-const EMPTY_ACTIVITY: DuelActivityDraft = { name: "", targetMinutes: 20, trackerActivityId: null };
-
 export function CreateDuelSheet({
   tracker,
   commit,
@@ -30,12 +28,13 @@ export function CreateDuelSheet({
   const [durationDays, setDurationDays] = useState<DuelDuration>(7);
   const [startsOn, setStartsOn] = useState(today);
   const [title, setTitle] = useState("");
-  const [activities, setActivities] = useState<DuelActivityDraft[]>([{ ...EMPTY_ACTIVITY, name: "Read", targetMinutes: 20 }]);
+  const [activities, setActivities] = useState<DuelActivityDraft[]>([]);
+  const [freshName, setFreshName] = useState("");
+  const [freshMinutes, setFreshMinutes] = useState(20);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
-  const [picking, setPicking] = useState<number | null>(null);
 
   const resolvedTitle = title.trim() || suggestDuelTitle(durationDays, activities[0]?.name ?? "");
   const activeActivities = tracker.activities.filter((activity) => activity.archivedAtMs === null);
@@ -44,32 +43,44 @@ export function CreateDuelSheet({
     setActivities((current) => current.map((activity, i) => (i === index ? { ...activity, ...patch } : activity)));
   };
 
-  const useExisting = (index: number, activity: Activity | null) => {
-    if (!activity) {
-      updateActivity(index, { trackerActivityId: null });
+  const toggleExisting = (activity: Activity) => {
+    const already = activities.some((item) => item.trackerActivityId === activity.id);
+    if (!already && activities.length >= 3) {
+      setError("A duel can include up to 3 activities.");
       return;
     }
-    updateActivity(index, { trackerActivityId: activity.id, name: activity.name });
+    setActivities((current) => {
+      if (current.some((item) => item.trackerActivityId === activity.id)) {
+        return current.filter((item) => item.trackerActivityId !== activity.id);
+      }
+      return [...current, { name: activity.name, targetMinutes: activity.goalMinutes ?? 20, trackerActivityId: activity.id }];
+    });
+    setError(null);
   };
 
-  const createMatching = (index: number) => {
-    const name = activities[index]?.name.trim();
-    if (!name || name.length < 2) {
-      setError("Name the activity before creating it.");
+  const createAndSelect = () => {
+    const name = freshName.trim();
+    if (name.length < 2) {
+      setError("Name the activity before adding it to Today.");
+      return;
+    }
+    if (activities.length >= 3) {
+      setError("A duel can include up to 3 activities.");
+      return;
+    }
+    const match = activeActivities.find((item) => item.name.trim().toLowerCase() === name.toLowerCase());
+    if (match) {
+      if (!activities.some((item) => item.trackerActivityId === match.id)) {
+        setActivities((current) => [...current, { name: match.name, targetMinutes: freshMinutes, trackerActivityId: match.id }]);
+      }
+      setFreshName("");
+      setError(null);
       return;
     }
     const id = createActivityId(name);
-    commit((base) =>
-      addActivity(base, {
-        id,
-        name,
-        iconKey: "briefcase",
-        color: "#8E7BFF",
-        goalMinutes: activities[index]?.targetMinutes ?? null,
-        cue: "Duel activity",
-      }),
-    );
-    updateActivity(index, { trackerActivityId: id });
+    commit((base) => addActivity(base, { id, name, iconKey: "briefcase", color: "#8E7BFF", goalMinutes: freshMinutes, cue: "Duel activity" }));
+    setActivities((current) => [...current, { name, targetMinutes: freshMinutes, trackerActivityId: id }]);
+    setFreshName("");
     setError(null);
   };
 
@@ -138,71 +149,42 @@ export function CreateDuelSheet({
             <span className="eyebrow mb-1.5 block">Title</span>
             <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={48} placeholder={suggestDuelTitle(durationDays, activities[0]?.name ?? "")} className="field" />
           </label>
-          <div className="space-y-3">
+          <div>
+            <p className="eyebrow mb-2">From Today</p>
+            {activeActivities.length === 0 && <p className="text-xs text-text-3">No activities on Today yet. Add one below.</p>}
+            <ul className="space-y-1">
+              {activeActivities.map((item) => {
+                const selected = activities.some((activity) => activity.trackerActivityId === item.id);
+                return (
+                  <li key={item.id}>
+                    <button type="button" aria-pressed={selected} onClick={() => toggleExisting(item)} className={`min-h-11 w-full rounded-xl border px-3 text-left text-sm ${selected ? "border-volt/50 text-text-1" : "border-line text-text-2"}`}>
+                      {selected ? "Selected" : "Select"} · {item.name}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="mt-3 flex gap-2">
+              <input value={freshName} onChange={(event) => setFreshName(event.target.value)} maxLength={36} placeholder="New activity" aria-label="New activity name" className="field" />
+              <input type="number" min={5} max={240} value={freshMinutes} onChange={(event) => setFreshMinutes(Number(event.target.value))} aria-label="New activity daily minutes" className="field numeric w-24" />
+            </div>
+            <button type="button" onClick={createAndSelect} className="mt-2 text-sm font-medium text-volt-hi">Add to Today and this duel</button>
+          </div>
+          <div className="space-y-2">
+            <p className="eyebrow">In this duel</p>
+            {activities.length === 0 && <p className="text-xs text-text-3">Choose at least one activity.</p>}
+            <p className="text-xs text-text-3">These names and daily targets are for the duel. Your Today activities keep their own names and goals.</p>
             {activities.map((activity, index) => (
-              <div key={index} className="rounded-[16px] border border-line bg-ink-0 px-3 py-3">
+              <div key={activity.trackerActivityId ?? index} className="rounded-[16px] border border-line bg-ink-0 px-3 py-3">
                 <div className="flex gap-2">
-                  <input
-                    value={activity.name}
-                    onChange={(event) => updateActivity(index, { name: event.target.value })}
-                    placeholder="Activity"
-                    maxLength={36}
-                    className="field"
-                    aria-label={`Activity ${index + 1} name`}
-                  />
-                  <input
-                    type="number"
-                    min={5}
-                    max={240}
-                    value={activity.targetMinutes}
-                    onChange={(event) => updateActivity(index, { targetMinutes: Number(event.target.value) })}
-                    className="field numeric w-24"
-                    aria-label={`Activity ${index + 1} daily minutes`}
-                  />
+                  <input value={activity.name} onChange={(event) => updateActivity(index, { name: event.target.value })} maxLength={36} aria-label={`Shared name ${index + 1}`} className="field" />
+                  <input type="number" min={5} max={240} value={activity.targetMinutes} onChange={(event) => updateActivity(index, { targetMinutes: Number(event.target.value) })} aria-label={`Daily minutes ${index + 1}`} className="field numeric w-24" />
                 </div>
-                {activity.trackerActivityId ? (
-                  <p className="mt-2 text-xs text-mint">
-                    On your Today list
-                    <button type="button" onClick={() => updateActivity(index, { trackerActivityId: null })} className="ml-2 font-medium text-text-3">
-                      Change
-                    </button>
-                  </p>
-                ) : (
-                  <div className="mt-2 flex gap-2">
-                    <button type="button" onClick={() => setPicking(picking === index ? null : index)} className="btn btn-ghost h-10 flex-1 text-xs">
-                      Use existing
-                    </button>
-                    <button type="button" onClick={() => createMatching(index)} className="btn btn-ghost h-10 flex-1 text-xs">
-                      Add to Today
-                    </button>
-                  </div>
-                )}
-                {picking === index && !activity.trackerActivityId && (
-                  <ul className="mt-2 space-y-1">
-                    {activeActivities.length === 0 && <li className="text-xs text-text-3">You don't have an activity yet. Add one to Today.</li>}
-                    {activeActivities.map((item) => (
-                      <li key={item.id}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            useExisting(index, item);
-                            setPicking(null);
-                          }}
-                          className="min-h-11 w-full rounded-xl px-3 text-left text-sm text-text-1 hover:bg-white/5"
-                        >
-                          {item.name}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <button type="button" onClick={() => setActivities((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="mt-2 text-xs font-medium text-text-3">
+                  Remove from duel
+                </button>
               </div>
             ))}
-            {activities.length < 3 && (
-              <button type="button" onClick={() => setActivities((current) => [...current, { ...EMPTY_ACTIVITY }])} className="text-sm font-medium text-text-2">
-                Add activity
-              </button>
-            )}
           </div>
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <button type="submit" className="btn btn-primary h-12 w-full">Review rules</button>

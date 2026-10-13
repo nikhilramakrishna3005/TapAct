@@ -3,6 +3,7 @@ import { inviteBlockMessage, inviteDecision, validateDuelDraft } from "./invite"
 import {
   compareScores,
   duelIsFinal,
+  nextRuleDay,
   officialStartDate,
   scoreMember,
   startOfZonedDay,
@@ -188,6 +189,41 @@ describe("duel scoring", () => {
       expect(scored.days[0].activities[0].minutes).toBe(25);
       expect(scored.points).toBe(30);
     }
+  });
+
+  it("keeps past days on the old rules when a later version starts", () => {
+    const read = { id: "read", targetMinutes: 20, trackerActivityId: "reading" };
+    const move = { id: "move", targetMinutes: 30, trackerActivityId: "gym" };
+    const scored = scoreMember(
+      member({
+        activities: [],
+        sessions: [
+          { activityId: "reading", startMs: Date.parse("2026-10-12T14:00:00.000Z"), endMs: Date.parse("2026-10-12T14:30:00.000Z"), source: "timer" },
+          { activityId: "reading", startMs: Date.parse("2026-10-13T14:00:00.000Z"), endMs: Date.parse("2026-10-13T14:40:00.000Z"), source: "timer" },
+          { activityId: "gym", startMs: Date.parse("2026-10-12T16:00:00.000Z"), endMs: Date.parse("2026-10-12T16:40:00.000Z"), source: "timer" },
+          { activityId: "gym", startMs: Date.parse("2026-10-13T16:00:00.000Z"), endMs: Date.parse("2026-10-13T16:40:00.000Z"), source: "timer" },
+        ],
+      }),
+      "2026-10-12",
+      7,
+      [
+        { effectiveOn: "2026-10-12", activities: [read, move] },
+        { effectiveOn: "2026-10-13", activities: [{ ...read, targetMinutes: 50 }] },
+      ],
+    );
+    expect(scored.days[0].activities.map((item) => item.id)).toEqual(["read", "move"]);
+    expect(scored.days[0].points).toBe(50);
+    expect(scored.days[1].activities).toEqual([{ id: "read", minutes: 40, met: false }]);
+    expect(scored.days[1].points).toBe(0);
+    expect(scored.points).toBe(50);
+  });
+
+  it("starts an approved rule change on the next day that has not begun", () => {
+    const acceptedAt = Date.parse("2026-10-12T16:00:00.000Z");
+    expect(nextRuleDay(acceptedAt, [ZONE], "2026-10-12", 7)).toBe("2026-10-13");
+    expect(nextRuleDay(acceptedAt, [ZONE, "Asia/Tokyo"], "2026-10-12", 7)).toBe("2026-10-14");
+    expect(nextRuleDay(acceptedAt, [ZONE], "2026-10-20", 7)).toBe("2026-10-20");
+    expect(nextRuleDay(Date.parse("2026-10-18T16:00:00.000Z"), [ZONE], "2026-10-12", 7)).toBe(null);
   });
 
   it("calls a tie a tie and waits for both time zones to finish", () => {
