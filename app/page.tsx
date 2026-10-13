@@ -1,17 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import {
-  Archive,
-  CalendarDays,
-  Check,
-  House,
-  LineChart,
-  PencilLine,
-  Plus,
-  Settings2,
-  UserRound,
-} from "lucide-react";
+import { Archive, Check, PencilLine, Plus, UserRound } from "lucide-react";
 import {
   type FormEvent,
   useCallback,
@@ -55,6 +45,8 @@ import { LifeAreaPicker } from "./components/LifeBalance";
 import { ActivityCard } from "./components/ActivityCard";
 import { AuthProvider, useAuth } from "./components/AuthProvider";
 import { CloudSyncProvider } from "./components/CloudSync";
+import { DuelsView } from "./components/DuelsView";
+import { type AppTab, FocusDock } from "./components/FocusDock";
 import { HistoryView } from "./components/HistoryView";
 import { InsightsView } from "./components/InsightsView";
 import { MotionPrefsProvider, useMotionPrefs } from "./components/MotionPrefs";
@@ -84,7 +76,7 @@ function getBrowserStorage(): WritableStorageLike | null {
 const TRACKED_TIME_CAP_MS = 8 * 60 * MS_PER_MINUTE;
 const MILESTONE_VISIBLE_MS = 3600;
 
-type Tab = "home" | "insights" | "history" | "settings";
+type Tab = AppTab;
 type OnboardingPhase = "pending" | "show" | "done";
 
 type Milestone = {
@@ -95,12 +87,6 @@ type Milestone = {
   all: boolean;
 };
 
-const NAV_ITEMS = [
-  { id: "home", label: "Today", icon: House },
-  { id: "insights", label: "Insights", icon: LineChart },
-  { id: "history", label: "History", icon: CalendarDays },
-  { id: "settings", label: "Settings", icon: Settings2 },
-] as const;
 
 type ActivityDraft = {
   name: string;
@@ -659,6 +645,8 @@ function Home() {
           >
             {tab === "insights" ? (
               <InsightsView tracker={liveTracker} todayKey={todayKey} />
+            ) : tab === "duels" ? (
+              <DuelsView />
             ) : tab === "history" ? (
               <HistoryView tracker={liveTracker} todayKey={todayKey} nowMs={nowMs} />
             ) : tab === "settings" ? (
@@ -867,50 +855,14 @@ function Home() {
         </AnimatePresence>
       </div>
 
-      <nav aria-label="Primary" className="pointer-events-none fixed inset-x-0 bottom-[calc(0.9rem+env(safe-area-inset-bottom))] z-20">
-        <div className="glass pointer-events-auto mx-auto grid w-[calc(100%-24px)] max-w-[380px] grid-cols-4 items-center gap-1 rounded-[26px] p-1.5 shadow-[0_24px_48px_-24px_rgba(0,0,0,1)]">
-          {NAV_ITEMS.map((item) => {
-            const NavIcon = item.icon;
-            const isCurrent = tab === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  if (!isCurrent) {
-                    setTab(item.id);
-                    window.scrollTo({ top: 0 });
-                  }
-                }}
-                aria-current={isCurrent ? "page" : undefined}
-                className="relative min-h-[52px] rounded-[20px] px-1.5 py-2 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
-              >
-                {isCurrent && (
-                  <motion.span
-                    layoutId="nav-active"
-                    className="absolute inset-0 rounded-[20px] bg-white/[0.08]"
-                    transition={SPRING_SNAPPY}
-                  >
-                    <span className="absolute left-1/2 top-1 h-[3px] w-4 -translate-x-1/2 rounded-full bg-volt" />
-                  </motion.span>
-                )}
-                <NavIcon
-                  className={`relative mx-auto size-[18px] transition-colors ${
-                    isCurrent ? "text-text-1" : "text-text-3"
-                  }`}
-                />
-                <p
-                  className={`relative mt-1 text-[0.66rem] font-medium tracking-[0.02em] transition-colors ${
-                    isCurrent ? "text-text-1" : "text-text-3"
-                  }`}
-                >
-                  {item.label}
-                </p>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+      <FocusDock
+        tab={tab}
+        onChange={(next) => {
+          if (next === tab) return;
+          setTab(next);
+          window.scrollTo({ top: 0 });
+        }}
+      />
 
       <AnimatePresence>
         {isAddSheetOpen && (
