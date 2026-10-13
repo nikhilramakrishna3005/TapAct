@@ -81,6 +81,33 @@ describe("duel migration authorization", () => {
     expect(setRules).not.toContain("tapact_duel_activities_sort_unique");
   });
 
+  it("stores cosmetic character identity per user and exposes only the public duel portrait", () => {
+    const characters = readFileSync(resolve(process.cwd(), "supabase/migrations/20261014010000_tapact_duel_characters.sql"), "utf8");
+    expect(characters).toContain("create table if not exists public.tapact_duel_characters");
+    expect(characters).toContain("alter table public.tapact_duel_characters enable row level security");
+    expect(characters).toContain("alter table public.tapact_duel_characters force row level security");
+    expect(characters).toContain("revoke all on public.tapact_duel_characters from anon, authenticated");
+    expect(characters).toContain("create or replace function public.tapact_get_duel_character()");
+    expect(characters).toContain("create or replace function public.tapact_set_duel_character(payload jsonb)");
+    expect(characters).toContain("create or replace function public.tapact_duel_board(p_duel uuid)");
+    expect(characters).toContain("'character', public.tapact_duel_public_character(uid)");
+    expect(characters).toContain("'character', public.tapact_duel_public_character(friend.user_id)");
+    expect(characters).toContain("where public.tapact_duel_characters.user_id = uid");
+    expect(characters).toContain("revoke all on function public.tapact_duel_public_character(uuid) from public, anon, authenticated");
+    expect(characters).not.toContain("email");
+    expect(characters).not.toContain("create or replace function public.tapact_duel_timer_minutes");
+    expect(characters).not.toContain("create or replace function public.tapact_duel_member_score");
+    expect(characters).not.toMatch(/set\s+constraints/i);
+    expect(characters).not.toMatch(/grant (insert|update|delete|select) on public\.tapact_duel/i);
+    expect(characters).toContain("grant execute on function public.tapact_get_duel_character() to authenticated");
+    expect(characters).toContain("grant execute on function public.tapact_set_duel_character(jsonb) to authenticated");
+    const bodies = characters.split(/create or replace function/i).slice(1);
+    for (const body of bodies) {
+      expect(body).toContain("security definer");
+      expect(body).toContain("set search_path = ''");
+    }
+  });
+
   it("lets a departed member archive only their own list row", () => {
     const left = readFileSync(resolve(process.cwd(), "supabase/migrations/20261013230000_tapact_duel_left_archive.sql"), "utf8");
     expect(left).toContain("create or replace function public.tapact_archive_duel(p_duel uuid)");

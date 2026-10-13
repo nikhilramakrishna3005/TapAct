@@ -6,6 +6,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DURATION, EASE_OUT } from "@/lib/motion";
 import { duelError, duelsApi, type DuelBoard, type DuelListItem } from "@/lib/duels/api";
 import {
+  archetypeOf,
+  clearCharacterSkipped,
+  hasSkippedCharacter,
+  isMissingCharacterRpc,
+  markCharacterSkipped,
+  type DuelCharacterPublic,
+} from "@/lib/duels/character";
+import {
   alreadyResolvedDuelAction,
   archivedDuelAction,
   archivedDuelLabel,
@@ -25,6 +33,8 @@ import { useCloudSync } from "./CloudSync";
 import { useMotionPrefs } from "./MotionPrefs";
 import { ConfirmSheet } from "./duels/ConfirmSheet";
 import { BattleShowcase } from "./duels/BattleShowcase";
+import { CharacterPortrait } from "./duels/CharacterPortrait";
+import { ChooseCharacter } from "./duels/ChooseCharacter";
 import { CreateDuelSheet } from "./duels/CreateDuelSheet";
 import { DuelArena } from "./duels/DuelArena";
 import { EmptyState, ScreenHeader, Sheet } from "./ui";
@@ -53,13 +63,26 @@ export function DuelsView({
   const [confirm, setConfirm] = useState<{ id: string; action: DuelMenuAction | "restore" } | null>(null);
   const [acting, setActing] = useState(false);
   const [switching, setSwitching] = useState(false);
+  const [character, setCharacter] = useState<DuelCharacterPublic | null>(null);
+  const [characterReady, setCharacterReady] = useState(false);
+  const [skippedCharacter, setSkippedCharacter] = useState(false);
+  const [picker, setPicker] = useState<"choose" | "change" | "customize" | null>(null);
   const actingLock = useRef(false);
   const opened = useRef(false);
+  const offeredCharacter = useRef(false);
   const boardsRef = useRef(new Map<string, DuelBoard>());
   const selectedRef = useRef<string | null>(null);
   const latestBoardGen = useRef(0);
   const historyKeyRef = useRef<string | null>(null);
   selectedRef.current = selected;
+
+  const applyCharacterToBoards = useCallback((next: DuelCharacterPublic | null) => {
+    setCharacter(next);
+    boardsRef.current.forEach((cached, id) => {
+      boardsRef.current.set(id, { ...cached, you: { ...cached.you, character: next } });
+    });
+    setBoard((current) => (current ? { ...current, you: { ...current.you, character: next } } : current));
+  }, []);
 
   const rememberBoard = useCallback((next: DuelBoard) => {
     boardsRef.current.set(next.duel.id, next);
@@ -148,6 +171,41 @@ export function DuelsView({
       cancelled = true;
     };
   }, [auth.status, loadList]);
+
+  useEffect(() => {
+    if (auth.status !== "signed-in" || !auth.account) {
+      setCharacterReady(false);
+      offeredCharacter.current = false;
+      return;
+    }
+    const client = getSupabaseBrowserClient();
+    if (!client) {
+      setCharacterReady(true);
+      return;
+    }
+    const userId = auth.account.id;
+    setSkippedCharacter(hasSkippedCharacter(window.localStorage, userId));
+    let cancelled = false;
+    duelsApi.character(client).then((next) => {
+      if (cancelled) return;
+      setCharacter(next);
+      setCharacterReady(true);
+    }).catch((caught) => {
+      if (cancelled) return;
+      setCharacter(null);
+      setCharacterReady(true);
+      if (!isMissingCharacterRpc(caught)) setError(duelError(caught));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.account, auth.status]);
+
+  useEffect(() => {
+    if (!characterReady || character || skippedCharacter || offeredCharacter.current) return;
+    offeredCharacter.current = true;
+    setPicker("choose");
+  }, [character, characterReady, skippedCharacter]);
 
   useEffect(() => {
     if (!items || opened.current) return;
@@ -287,6 +345,34 @@ export function DuelsView({
     <>
       <ScreenHeader eyebrow="Duels" title="The arena." />
 
+      {characterReady && (
+        <section className="mt-4 flex items-center justify-between gap-3 rounded-[20px] border border-line bg-ink-1 px-3 py-2.5">
+          <div className="flex min-w-0 items-center gap-3">
+            <CharacterPortrait character={character} name={auth.account?.displayName ?? "You"} size="sm" className="mx-0" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-text-1">
+                {character ? `${archetypeOf(character.archetype)?.name ?? "Character"} · ${character.title}` : "Choose your character"}
+              </p>
+              <p className="truncate text-xs text-text-3">{character ? "Shown in every duel. Cosmetic only." : "Skip now, or pick one before your next challenge."}</p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-col items-end">
+            <button
+              type="button"
+              className="min-h-11 text-xs font-semibold text-volt-hi"
+              onClick={() => setPicker(character ? "change" : "choose")}
+            >
+              {character ? "Change" : "Choose"}
+            </button>
+            {character && (
+              <button type="button" className="min-h-11 text-xs font-semibold text-volt-hi" onClick={() => setPicker("customize")}>
+                Customize
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
       {unsynced && (
         <p role="status" className="mt-4 rounded-2xl border border-ember/30 bg-ember/[0.07] px-3 py-2.5 text-xs text-[#FFD3B0]">
           {sync.status === "offline"
@@ -372,6 +458,8 @@ export function DuelsView({
               setBoard(null);
               setSwitching(false);
             }}
+            onChangeCharacter={() => setPicker("change")}
+            onCustomizeCharacter={() => setPicker("customize")}
           />
         </motion.div>
       )}
@@ -410,6 +498,43 @@ export function DuelsView({
       </details>
 
       <button type="button" onClick={() => void refresh()} className="mt-4 min-h-11 text-sm font-medium text-text-3">Refresh</button>
+
+      {picker && (
+        <ChooseCharacter
+          mode={picker}
+          current={character}
+          busy={acting}
+          onClose={() => {
+            if (picker === "choose" && !character && auth.account) {
+              markCharacterSkipped(window.localStorage, auth.account.id);
+              setSkippedCharacter(true);
+            }
+            setPicker(null);
+          }}
+          onSkip={
+            picker === "choose"
+              ? () => {
+                  if (auth.account) {
+                    markCharacterSkipped(window.localStorage, auth.account.id);
+                    setSkippedCharacter(true);
+                  }
+                  setPicker(null);
+                }
+              : undefined
+          }
+          onSave={async (next) => {
+            await act(async () => {
+              const client = getSupabaseBrowserClient();
+              if (!client) return;
+              const saved = await duelsApi.setCharacter(client, next);
+              if (auth.account) clearCharacterSkipped(window.localStorage, auth.account.id);
+              setSkippedCharacter(false);
+              applyCharacterToBoards(saved);
+              setPicker(null);
+            }, "Character saved.");
+          }}
+        />
+      )}
 
       {creating && (
         <CreateDuelSheet
