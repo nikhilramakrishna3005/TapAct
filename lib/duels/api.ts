@@ -8,7 +8,12 @@ export type DuelListItem = {
   startsOn: string;
   durationDays: number;
   awaitingOpponent: boolean;
+  archived: boolean;
+  creator: boolean;
+  memberStatus: "active" | "left";
 };
+
+export type DuelRuleActivity = { id?: string; name: string; targetMinutes: number; trackerActivityId?: string | null };
 
 export type BoardDay = {
   dayKey: string;
@@ -45,6 +50,7 @@ export type DuelBoard = {
     status: string;
     shareLive: boolean;
     muted: boolean;
+    creator?: boolean;
     todayKey: string;
     mappings: { challengeActivityId: string; trackerActivityId: string }[];
   };
@@ -96,8 +102,20 @@ async function call<T>(client: SupabaseClient, fn: string, args: Record<string, 
   return data as T;
 }
 
+function asListItem(raw: DuelListItem): DuelListItem {
+  return {
+    ...raw,
+    archived: Boolean(raw.archived),
+    creator: Boolean(raw.creator),
+    memberStatus: raw.memberStatus === "left" ? "left" : "active",
+  };
+}
+
 export const duelsApi = {
-  list: (client: SupabaseClient) => call<DuelListItem[]>(client, "tapact_list_duels", {}),
+  list: async (client: SupabaseClient) => {
+    const rows = await call<DuelListItem[]>(client, "tapact_list_duels", {});
+    return (Array.isArray(rows) ? rows : []).map(asListItem);
+  },
   board: (client: SupabaseClient, duelId: string) => call<DuelBoard>(client, "tapact_duel_board", { p_duel: duelId }),
   create: (client: SupabaseClient, payload: unknown) => call<{ duelId: string; token: string }>(client, "tapact_create_duel", { payload }),
   preview: (client: SupabaseClient, token: string) => call<InvitePreview>(client, "tapact_preview_duel_invite", { token }),
@@ -106,13 +124,15 @@ export const duelsApi = {
   revoke: (client: SupabaseClient, duelId: string) => call<void>(client, "tapact_revoke_duel_invite", { p_duel: duelId }),
   reissue: (client: SupabaseClient, duelId: string) => call<{ token: string }>(client, "tapact_reissue_duel_invite", { p_duel: duelId }),
   leave: (client: SupabaseClient, duelId: string) => call<void>(client, "tapact_leave_duel", { p_duel: duelId }),
+  archive: (client: SupabaseClient, duelId: string) => call<void>(client, "tapact_archive_duel", { p_duel: duelId }),
+  restore: (client: SupabaseClient, duelId: string) => call<void>(client, "tapact_restore_duel", { p_duel: duelId }),
   prefs: (client: SupabaseClient, duelId: string, share: boolean, muted: boolean) =>
     call<void>(client, "tapact_set_duel_prefs", { p_duel: duelId, p_share: share, p_muted: muted }),
   map: (client: SupabaseClient, duelId: string, activityId: string, trackerActivityId: string | null) =>
     call<void>(client, "tapact_map_duel_activity", { p_duel: duelId, p_activity: activityId, p_tracker: trackerActivityId }),
-  setRules: (client: SupabaseClient, duelId: string, activities: { id?: string; name: string; targetMinutes: number }[]) =>
+  setRules: (client: SupabaseClient, duelId: string, activities: DuelRuleActivity[]) =>
     call<void>(client, "tapact_set_duel_rules", { p_duel: duelId, payload: { activities } }),
-  proposeRules: (client: SupabaseClient, duelId: string, activities: { id?: string; name: string; targetMinutes: number }[]) =>
+  proposeRules: (client: SupabaseClient, duelId: string, activities: DuelRuleActivity[]) =>
     call<string>(client, "tapact_propose_duel_rules", { p_duel: duelId, payload: { activities } }),
   approveProposal: async (client: SupabaseClient, proposalId: string) => {
     const result = await call<{ effectiveOn?: string; stale?: boolean }>(client, "tapact_approve_duel_proposal", { p_proposal: proposalId });

@@ -179,10 +179,12 @@ export function Sheet({
   label,
   onClose,
   children,
+  layer = "base",
 }: {
   label: string;
   onClose: () => void;
   children: React.ReactNode;
+  layer?: "base" | "nested";
 }) {
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -199,7 +201,7 @@ export function Sheet({
 
   return (
     <motion.div
-      className="fixed inset-0 z-30 bg-black/70"
+      className={`fixed inset-0 bg-black/70 ${layer === "nested" ? "z-40" : "z-30"}`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
