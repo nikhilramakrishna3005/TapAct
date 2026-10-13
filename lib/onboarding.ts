@@ -6,7 +6,7 @@ import {
   type TrackerState,
 } from "./tracker";
 
-export type StarterActivity = Omit<Activity, "archivedAtMs">;
+export type StarterActivity = Omit<Activity, "archivedAtMs" | "category">;
 
 /** The first four reuse the default activity ids so choosing them keeps any existing time attached. */
 export const STARTER_PRESETS: StarterActivity[] = [

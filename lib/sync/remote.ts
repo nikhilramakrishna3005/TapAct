@@ -81,9 +81,19 @@ export function activityToRow(userId: string, activity: SyncActivity) {
     goal_minutes: activity.goalMinutes,
     cue: activity.cue,
     archived_at_ms: activity.archivedAtMs,
+    category: activity.category ?? null,
     client_updated_at_ms: Math.round(activity.updatedAtMs),
     updated_by_device: activity.deviceId,
   };
+}
+
+/** Columns added after launch; uploads retry without them until the migration is applied. */
+const OPTIONAL_ACTIVITY_COLUMNS = ["category"];
+
+export function isMissingColumnError(error: PostgrestErrorLike | unknown, column: string): boolean {
+  const candidate = (typeof error === "object" && error !== null ? error : {}) as { code?: unknown; message?: unknown };
+  const message = typeof candidate.message === "string" ? candidate.message : "";
+  return (candidate.code === "PGRST204" || candidate.code === "42703") && message.includes(column);
 }
 
 /** Manual or deleted sessions need the session-edit columns; plain timer segments don't. */
@@ -130,6 +140,7 @@ export function rowToActivity(row: Record<string, unknown>): SyncActivity | null
     goalMinutes: row.goal_minutes,
     cue: row.cue,
     archivedAtMs: row.archived_at_ms,
+    category: "category" in row ? row.category : undefined,
     updatedAtMs: row.client_updated_at_ms,
     deviceId: row.updated_by_device,
   });
@@ -162,16 +173,24 @@ function quote(value: string): string {
 }
 
 export function createSupabaseRemote(client: SupabaseClient): SyncRemote {
-  async function upsert(table: string, rows: Record<string, unknown>[]) {
+  async function upsert(table: string, rows: Record<string, unknown>[], optionalColumns: string[] = []) {
     for (const chunk of chunks(rows, PUSH_CHUNK)) {
-      let result;
-      try {
-        result = await client.from(table).upsert(chunk, { onConflict: "user_id,id" });
-      } catch (error) {
-        throw classifyRemoteError(error);
-      }
-      if (result.error) {
-        throw classifyRemoteError({ ...result.error, status: result.status });
+      let payload = chunk;
+      for (;;) {
+        let result;
+        try {
+          result = await client.from(table).upsert(payload, { onConflict: "user_id,id" });
+        } catch (error) {
+          throw classifyRemoteError(error);
+        }
+        if (!result.error) break;
+        const missing = optionalColumns.find(
+          (column) => column in (payload[0] ?? {}) && isMissingColumnError(result.error, column),
+        );
+        if (!missing) {
+          throw classifyRemoteError({ ...result.error, status: result.status });
+        }
+        payload = payload.map(({ [missing]: _omitted, ...rest }) => rest);
       }
     }
   }
@@ -224,7 +243,11 @@ export function createSupabaseRemote(client: SupabaseClient): SyncRemote {
   return {
     async push(userId, changes) {
       // Activities first: entries and baselines reference them.
-      await upsert(TABLES.activities, changes.activities.map((item) => activityToRow(userId, item)));
+      await upsert(
+        TABLES.activities,
+        changes.activities.map((item) => activityToRow(userId, item)),
+        OPTIONAL_ACTIVITY_COLUMNS,
+      );
       await upsert(TABLES.baselines, changes.baselines.map((item) => baselineToRow(userId, item)));
       // Separate requests keep row shapes uniform, so plain segments never send the edit columns.
       await upsert(TABLES.entries, changes.entries.filter((item) => !isEditedEntry(item)).map((item) => entryToRow(userId, item)));

@@ -12,6 +12,15 @@ export type ActivityIconName =
   | "pen"
   | "palette";
 
+/** Life areas for Life Balance. An activity without one is "Unassigned". */
+export type LifeCategoryId = "work" | "health" | "learning" | "relationships" | "rest";
+
+export const LIFE_CATEGORY_IDS: readonly LifeCategoryId[] = ["work", "health", "learning", "relationships", "rest"];
+
+export function isLifeCategoryId(value: unknown): value is LifeCategoryId {
+  return typeof value === "string" && (LIFE_CATEGORY_IDS as readonly string[]).includes(value);
+}
+
 export type Activity = {
   id: string;
   name: string;
@@ -20,6 +29,7 @@ export type Activity = {
   goalMinutes: number | null;
   cue: string;
   archivedAtMs: number | null;
+  category: LifeCategoryId | null;
 };
 
 export type DailyRecords = Record<string, Record<string, number>>;
@@ -72,6 +82,7 @@ export const DEFAULT_ACTIVITIES: Activity[] = [
     goalMinutes: 140,
     cue: "Deep work sessions",
     archivedAtMs: null,
+    category: null,
   },
   {
     id: "gym",
@@ -81,6 +92,7 @@ export const DEFAULT_ACTIVITIES: Activity[] = [
     goalMinutes: 50,
     cue: "Strength and cardio",
     archivedAtMs: null,
+    category: null,
   },
   {
     id: "communication",
@@ -90,6 +102,7 @@ export const DEFAULT_ACTIVITIES: Activity[] = [
     goalMinutes: 45,
     cue: "Speaking practice",
     archivedAtMs: null,
+    category: null,
   },
   {
     id: "reading",
@@ -99,6 +112,7 @@ export const DEFAULT_ACTIVITIES: Activity[] = [
     goalMinutes: 60,
     cue: "Focused reading time",
     archivedAtMs: null,
+    category: null,
   },
 ];
 
@@ -201,6 +215,7 @@ function normalizeActivity(activity: unknown, fallbackIndex: number): Activity |
     goalMinutes: sanitizeGoalMinutes(activity.goalMinutes),
     cue,
     archivedAtMs,
+    category: isLifeCategoryId(activity.category) ? activity.category : null,
   };
 }
 
@@ -549,18 +564,19 @@ export function toggleActivity(
 
 export function addActivity(
   state: TrackerState,
-  activity: Omit<Activity, "archivedAtMs">,
+  activity: Omit<Activity, "archivedAtMs" | "category"> & { category?: LifeCategoryId | null },
 ): TrackerState {
+  const category = isLifeCategoryId(activity.category) ? activity.category : null;
   return {
     ...state,
-    activities: [...state.activities, { ...activity, archivedAtMs: null }],
+    activities: [...state.activities, { ...activity, archivedAtMs: null, category }],
   };
 }
 
 export function updateActivity(
   state: TrackerState,
   activityId: string,
-  updates: Partial<Pick<Activity, "name" | "iconKey" | "color" | "goalMinutes" | "cue">>,
+  updates: Partial<Pick<Activity, "name" | "iconKey" | "color" | "goalMinutes" | "cue" | "category">>,
 ): TrackerState {
   const name = updates.name?.trim();
   const cue = updates.cue?.trim();
@@ -593,6 +609,10 @@ export function updateActivity(
           typeof cue === "string" && cue.length > 0
             ? cue.slice(0, 48)
             : activity.cue,
+        category:
+          updates.category === null || isLifeCategoryId(updates.category)
+            ? updates.category
+            : activity.category,
       };
     }),
   };
