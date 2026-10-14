@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { duelsApi, shareInvite, type DuelBoard } from "@/lib/duels/api";
 import { compactDuelStatus } from "@/lib/duels/arena";
 import { describeRuleChanges } from "@/lib/duels/rules";
@@ -11,7 +11,9 @@ import { addActivity, createActivityId, toggleActivity, type TrackerState } from
 import type { TrackerUpdate } from "@/lib/trackerStore";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { archetypeOf } from "@/lib/duels/character";
+import { completedRecapDays, recapHighlight, recapSeenKey } from "@/lib/duels/recap";
 import { ArenaVersus } from "./ArenaVersus";
+import { DailyRecap } from "./DailyRecap";
 import { BattleShowcase } from "./BattleShowcase";
 import { CharacterPortrait } from "./CharacterPortrait";
 import { ManageActivitiesSheet, ProposalCard } from "./ManageActivitiesSheet";
@@ -59,6 +61,8 @@ export function DuelArena({
   const inRange = board.youDays.some((day) => day.dayKey === todayKey);
   const [selectedDay, setSelectedDay] = useState(inRange ? todayKey : (board.youDays[0]?.dayKey ?? board.duel.startsOn));
   const [connectId, setConnectId] = useState<string | "all" | null>(connectOnOpen ? "all" : null);
+  const [recapOpen, setRecapOpen] = useState(false);
+  const [seenRecap, setSeenRecap] = useState<string | null>(null);
   const [managing, setManaging] = useState(false);
   const activities = tracker.activities.filter((activity) => activity.archivedAtMs === null);
   const mapped = new Map(board.you.mappings.map((item) => [item.challengeActivityId, item.trackerActivityId]));
@@ -95,6 +99,17 @@ export function DuelArena({
     connect(challengeActivityId, id);
   };
 
+  const recapZones = [board.you.timeZone, board.friend?.timeZone].filter((zone): zone is string => Boolean(zone));
+  const newestRecap = completedRecapDays(board.youDays.map((day) => day.dayKey), recapZones, Date.now()).at(-1) ?? null;
+  useEffect(() => {
+    try {
+      setSeenRecap(window.localStorage.getItem(recapSeenKey(board.duel.id)));
+    } catch {
+      setSeenRecap(null);
+    }
+  }, [board.duel.id]);
+  const recapFresh = recapHighlight(seenRecap, newestRecap);
+
   const status = compactDuelStatus({
     todayKey,
     startsOn: board.duel.startsOn,
@@ -112,6 +127,23 @@ export function DuelArena({
             <p className="text-[0.7rem] text-text-3">{status}</p>
           </div>
           <div className="flex shrink-0 items-center">
+            <button
+              type="button"
+              onClick={() => {
+                setRecapOpen(true);
+                if (!newestRecap) return;
+                try {
+                  window.localStorage.setItem(recapSeenKey(board.duel.id), newestRecap);
+                } catch {
+                  // The highlight can return next visit if storage is blocked.
+                }
+                setSeenRecap(newestRecap);
+              }}
+              className="relative min-h-11 px-2 text-xs font-semibold text-ice"
+            >
+              Recap
+              {recapFresh && <span className="absolute right-1 top-2 size-1.5 rounded-full bg-ice" aria-hidden />}
+            </button>
             <details className="relative">
               <summary className="grid size-11 cursor-pointer list-none place-items-center text-xs font-semibold text-text-3 [&::-webkit-details-marker]:hidden" aria-label="Duel details">
                 Info
@@ -432,6 +464,7 @@ export function DuelArena({
           </div>
         </Sheet>
       )}
+      {recapOpen && <DailyRecap board={board} onClose={() => setRecapOpen(false)} />}
     </div>
   );
 }
