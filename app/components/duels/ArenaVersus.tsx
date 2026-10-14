@@ -86,10 +86,10 @@ export function ArenaVersus({
         : null;
 
   return (
-    <div className="relative mt-2 overflow-hidden rounded-[20px] border border-white/[0.06]" role="region" aria-label="Character versus arena">
+    <div className="relative mt-2 overflow-hidden rounded-[20px] border border-line" role="region" aria-label="Character versus arena">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_70%_at_8%_8%,rgba(142,123,255,0.22),transparent_50%),radial-gradient(80%_70%_at_92%_8%,rgba(95,227,255,0.16),transparent_50%),linear-gradient(180deg,#14141d,#0a0a10_72%)]"
+        className="arena-stage pointer-events-none absolute inset-0"
       />
 
       <div className="relative">
@@ -136,7 +136,7 @@ export function ArenaVersus({
             ? `Your score is ${youScore}. Your friend has not joined.`
             : `Score comparison ${youScore} to ${friendScore ?? 0}. ${leadCopy(lead)}.`}
         </p>
-        <div className="flex h-1 overflow-hidden rounded-full bg-white/10" aria-hidden>
+        <div className="flex h-1 overflow-hidden rounded-full bg-[var(--track)]" aria-hidden>
           <div
             className="h-full bg-volt transition-[width] duration-150 motion-reduce:transition-none"
             style={{ width: `${momentum.youPercent}%` }}
@@ -155,7 +155,7 @@ export function ArenaVersus({
         <div
           className={`relative mx-2 mb-2 flex items-center gap-2 rounded-[14px] border px-2 py-1.5 ${
             victory.kind === "tie" || victory.kind === "provisional"
-              ? "border-white/10 bg-ink-0/70"
+              ? "border-line-strong bg-ink-0/70"
               : victory.kind === "you"
                 ? "border-volt/35 bg-volt/[0.08]"
                 : "border-ice/35 bg-ice/[0.08]"
@@ -255,10 +255,10 @@ function PlayerMeta({
 function VsEmblem({ energy }: { energy: boolean }) {
   return (
     <div
-      className={`grid size-9 place-items-center rounded-full border border-white/20 bg-[#0b0b12]/92 backdrop-blur-[2px] ${energy ? "arena-vs-energy" : "shadow-[0_0_0_1px_rgba(142,123,255,0.28),0_0_12px_rgba(95,227,255,0.16)]"}`}
+      className={`arena-vs grid size-9 place-items-center rounded-full border backdrop-blur-[2px] ${energy ? "arena-vs-energy" : "shadow-[0_0_0_1px_rgba(142,123,255,0.28),0_0_12px_rgba(95,227,255,0.16)]"}`}
       aria-hidden
     >
-      <span className="text-[0.56rem] font-bold tracking-[0.16em] text-text-1">VS</span>
+      <span className="text-[0.56rem] font-bold tracking-[0.16em]">VS</span>
     </div>
   );
 }

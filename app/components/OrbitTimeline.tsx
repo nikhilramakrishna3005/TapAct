@@ -214,7 +214,7 @@ export function OrbitTimeline({
               className="absolute inset-y-0 w-px"
               style={{
                 left: `${mark.ratio * 100}%`,
-                background: mark.hour % 6 === 0 ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.04)",
+                background: mark.hour % 6 === 0 ? "var(--tick)" : "var(--wash)",
               }}
             />
           ))}
@@ -225,7 +225,7 @@ export function OrbitTimeline({
               style={{
                 left: `${nowRatio * 100}%`,
                 background:
-                  "repeating-linear-gradient(135deg, rgba(255,255,255,0.025) 0 2px, transparent 2px 7px)",
+                  "repeating-linear-gradient(135deg, var(--hatch) 0 2px, transparent 2px 7px)",
               }}
             />
           )}
@@ -252,11 +252,11 @@ export function OrbitTimeline({
                   height: laneHeight,
                   borderRadius: `${session.continuesFromPreviousDay ? 3 : 999}px ${session.continuesIntoNextDay ? 3 : 999}px ${session.continuesIntoNextDay ? 3 : 999}px ${session.continuesFromPreviousDay ? 3 : 999}px`,
                   background: session.manual
-                    ? `repeating-linear-gradient(135deg, rgba(255,255,255,0.22) 0 2px, transparent 2px 6px), linear-gradient(180deg, ${tint(color, 0.85)}, ${tint(color, 0.6)})`
+                    ? `repeating-linear-gradient(135deg, var(--stripe) 0 2px, transparent 2px 6px), linear-gradient(180deg, ${tint(color, 0.85)}, ${tint(color, 0.6)})`
                     : `linear-gradient(180deg, ${tint(color, 0.95)}, ${tint(color, 0.7)})`,
                   boxShadow: isSelected
-                    ? `0 0 0 1.5px rgba(244,243,250,0.9), 0 0 18px ${tint(color, 0.7)}`
-                    : `0 0 12px -2px ${tint(color, 0.45)}, inset 0 1px 0 rgba(255,255,255,0.25)`,
+                    ? `0 0 0 1.5px color-mix(in srgb, var(--text-1) 90%, transparent), 0 0 18px ${tint(color, 0.7)}`
+                    : `0 0 12px -2px ${tint(color, 0.45)}, inset 0 1px 0 var(--bar-inset)`,
                   transition: "box-shadow var(--dur-quick) var(--ease-out)",
                 }}
                 initial={{ scaleX: 0, opacity: 0 }}
@@ -375,7 +375,7 @@ export function OrbitTimeline({
                   type="button"
                   aria-pressed={isSelected}
                   onClick={() => setSelectedId(isSelected ? null : session.id)}
-                  className="flex min-h-12 w-full items-center gap-3 rounded-[14px] px-2 py-2 text-left transition-colors duration-200 hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
+                  className="flex min-h-12 w-full items-center gap-3 rounded-[14px] px-2 py-2 text-left transition-colors duration-200 hover:bg-[var(--wash)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
                   style={isSelected ? { background: tint(session.activity.color, 0.1) } : undefined}
                 >
                   <span
@@ -555,7 +555,7 @@ function SessionDetail({
             <button
               type="button"
               onClick={onEdit}
-              className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full border border-line-strong bg-ink-0/60 text-sm font-medium text-text-1 transition-colors hover:border-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
+              className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full border border-line-strong bg-ink-0/60 text-sm font-medium text-text-1 transition-colors hover:border-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
             >
               <PencilLine className="size-4" />
               Edit
@@ -566,7 +566,7 @@ function SessionDetail({
               type="button"
               onClick={onDelete}
               aria-label="Delete session"
-              className="grid size-11 shrink-0 place-items-center rounded-full border border-danger/35 text-[#FFC4C4] transition-colors hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+              className="grid size-11 shrink-0 place-items-center rounded-full border border-danger/35 text-[var(--danger-soft)] transition-colors hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
             >
               <Trash2 className="size-4" />
             </button>
@@ -580,7 +580,7 @@ function SessionDetail({
 
 function DetailCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-[12px] bg-white/[0.04] px-2.5 py-2">
+    <div className="min-w-0 rounded-[12px] bg-[var(--wash)] px-2.5 py-2">
       <dt className="text-[0.58rem] font-semibold uppercase tracking-[0.14em] text-text-3">{label}</dt>
       <dd className="numeric mt-0.5 truncate text-[0.8rem] font-semibold text-text-1">{value}</dd>
     </div>

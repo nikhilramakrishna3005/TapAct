@@ -29,7 +29,7 @@ export function FocusDock({
       aria-label="Primary"
       className="pointer-events-none fixed inset-x-0 bottom-[calc(0.7rem+env(safe-area-inset-bottom))] z-20"
     >
-      <div className="pointer-events-auto mx-auto flex w-[calc(100%-1.5rem)] max-w-[400px] items-stretch rounded-full border border-white/[0.08] bg-[#0a0a10] px-1.5 py-1 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.95)]">
+      <div className="pointer-events-auto mx-auto flex w-[calc(100%-1.5rem)] max-w-[400px] items-stretch rounded-full border border-[var(--dock-line)] bg-[var(--dock)] px-1.5 py-1 shadow-[0_18px_36px_-22px_var(--shadow)]">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const current = tab === item.id;

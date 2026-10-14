@@ -45,7 +45,7 @@ export function AuthOrbit({ pose, busy }: { pose: OrbitPose; busy: boolean }) {
             <stop offset="1" stopColor="#5FE3FF" />
           </linearGradient>
         </defs>
-        <circle cx={C} cy={C} r={OUTER_R} fill="none" stroke="rgba(255,255,255,0.08)" strokeDasharray="2 7" />
+        <circle cx={C} cy={C} r={OUTER_R} fill="none" stroke="var(--orbit)" strokeDasharray="2 7" />
         <g className="ambient-spin" style={{ transformBox: "view-box", transformOrigin: `${C}px ${C}px` }}>
           <circle cx={C} cy={C - OUTER_R} r={2.2} fill="#B9ADFF" opacity={0.8} />
         </g>

@@ -194,7 +194,7 @@ export function ManageActivitiesSheet({
                 <button
                   type="button"
                   aria-pressed={draftTracker === item.id}
-                  className={`min-h-11 w-full rounded-xl px-2 text-left text-sm ${draftTracker === item.id ? "bg-volt/15 text-text-1" : "text-text-2 hover:bg-white/5"}`}
+                  className={`min-h-11 w-full rounded-xl px-2 text-left text-sm ${draftTracker === item.id ? "bg-volt/15 text-text-1" : "text-text-2 hover:bg-[var(--wash-strong)]"}`}
                   onClick={() => {
                     setDraftTracker(item.id);
                     setDraftName(item.name);

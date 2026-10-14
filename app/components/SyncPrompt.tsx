@@ -41,7 +41,7 @@ export function SyncPrompt({
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 bg-black/70"
+      className="fixed inset-0 z-50 bg-[var(--overlay)]"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -55,9 +55,9 @@ export function SyncPrompt({
         animate={{ y: 0 }}
         exit={{ y: "100%" }}
         transition={SPRING_SHEET}
-        className="absolute inset-x-0 bottom-0 mx-auto max-h-[92vh] w-full max-w-[430px] overflow-y-auto rounded-t-[var(--radius-xl)] border border-b-0 border-line-strong bg-ink-1 px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_60px_-30px_rgba(0,0,0,1)]"
+        className="absolute inset-x-0 bottom-0 mx-auto max-h-[92vh] w-full max-w-[430px] overflow-y-auto rounded-t-[var(--radius-xl)] border border-b-0 border-line-strong bg-ink-1 px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_60px_-30px_var(--sheet-shadow)]"
       >
-        <div className="mx-auto h-1 w-10 rounded-full bg-white/20" />
+        <div className="mx-auto h-1 w-10 rounded-full bg-[var(--handle)]" />
         <div className="mt-3 flex items-start justify-between gap-3">
           <div>
             <p className="eyebrow">Cloud sync</p>
@@ -119,12 +119,12 @@ export function SyncPrompt({
         )}
 
         {!online && (
-          <p role="status" className="mt-3 rounded-2xl border border-ice/25 bg-ice/[0.06] px-3 py-2.5 text-xs text-[#CFF6FF]">
+          <p role="status" className="mt-3 rounded-2xl border border-ice/25 bg-ice/[0.06] px-3 py-2.5 text-xs text-[var(--ice-ink)]">
             You&apos;re offline. Connect to the internet to choose, or decide later. Tracking keeps working.
           </p>
         )}
         {errorMessage && (
-          <p role="alert" className="mt-3 rounded-2xl border border-danger/30 bg-danger/[0.07] px-3 py-2.5 text-xs text-[#FFD0D0]">
+          <p role="alert" className="mt-3 rounded-2xl border border-danger/30 bg-danger/[0.07] px-3 py-2.5 text-xs text-[var(--danger-ink)]">
             {errorMessage} Nothing was changed on this device.
           </p>
         )}
@@ -209,7 +209,7 @@ function OptionButton({
       onClick={onClick}
       disabled={disabled}
       className={`flex w-full items-start gap-3 rounded-[var(--radius-md)] border px-3.5 py-3 text-left transition-colors disabled:opacity-50 ${
-        primary ? "border-volt/45 bg-volt/[0.09] hover:border-volt/70" : "border-line-strong bg-ink-0 hover:border-white/25"
+        primary ? "border-volt/45 bg-volt/[0.09] hover:border-volt/70" : "border-line-strong bg-ink-0 hover:border-line-strong"
       }`}
     >
       <span

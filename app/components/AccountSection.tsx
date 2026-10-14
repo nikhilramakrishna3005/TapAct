@@ -230,10 +230,10 @@ export function AccountSection() {
         >
           {status === "loading" && (
             <div className="flex items-center gap-3" role="status" aria-label="Checking account">
-              <span className="size-11 animate-pulse rounded-full bg-white/[0.06]" />
+              <span className="size-11 animate-pulse rounded-full bg-[var(--track-soft)]" />
               <div className="flex-1 space-y-2">
-                <span className="block h-3 w-1/2 animate-pulse rounded bg-white/[0.06]" />
-                <span className="block h-3 w-3/4 animate-pulse rounded bg-white/[0.04]" />
+                <span className="block h-3 w-1/2 animate-pulse rounded bg-[var(--track-soft)]" />
+                <span className="block h-3 w-3/4 animate-pulse rounded bg-[var(--wash)]" />
               </div>
             </div>
           )}

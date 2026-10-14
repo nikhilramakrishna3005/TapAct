@@ -124,7 +124,7 @@ export function Ring({
           r={radius}
           strokeWidth={stroke}
           fill="none"
-          stroke="rgba(255,255,255,0.07)"
+          stroke="var(--orbit)"
         />
         <circle
           cx={size / 2}
@@ -132,7 +132,7 @@ export function Ring({
           r={radius - stroke}
           strokeWidth={1}
           fill="none"
-          stroke="rgba(255,255,255,0.06)"
+          stroke="var(--orbit-dim)"
           strokeDasharray="2 5"
         />
         <motion.circle
@@ -208,7 +208,7 @@ export function Sheet({
 
   return (
     <motion.div
-      className={`fixed inset-0 bg-black/70 ${layer === "nested" ? "z-40" : "z-30"}`}
+      className={`fixed inset-0 bg-[var(--overlay)] ${layer === "nested" ? "z-40" : "z-30"}`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -224,9 +224,9 @@ export function Sheet({
         exit={{ y: "100%" }}
         transition={SPRING_SHEET}
         onClick={(event) => event.stopPropagation()}
-        className="absolute inset-x-0 bottom-0 mx-auto max-h-[92vh] w-full max-w-[430px] overflow-y-auto rounded-t-[var(--radius-xl)] border border-b-0 border-line-strong bg-ink-1 px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_60px_-30px_rgba(0,0,0,1)]"
+        className="absolute inset-x-0 bottom-0 mx-auto max-h-[92vh] w-full max-w-[430px] overflow-y-auto rounded-t-[var(--radius-xl)] border border-b-0 border-line-strong bg-ink-1 px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_60px_-30px_var(--sheet-shadow)]"
       >
-        <div className="mx-auto h-1 w-10 rounded-full bg-white/20" />
+        <div className="mx-auto h-1 w-10 rounded-full bg-[var(--handle)]" />
         <div className="mt-3 flex items-center justify-between">
           <h3 className="display text-[1.35rem]">{label}</h3>
           <button
@@ -348,7 +348,7 @@ export function EmptyState({ icon: Icon, title, body }: { icon: LucideIcon; titl
     <div className="relative overflow-hidden rounded-[var(--radius-md)] border border-dashed border-line-strong px-4 py-8 text-center">
       <div className="relative mx-auto grid size-14 place-items-center">
         <svg viewBox="0 0 56 56" className="absolute inset-0" aria-hidden="true">
-          <circle cx="28" cy="28" r="26" fill="none" stroke="rgba(255,255,255,0.1)" strokeDasharray="2 5" />
+          <circle cx="28" cy="28" r="26" fill="none" stroke="var(--orbit)" strokeDasharray="2 5" />
           <circle cx="28" cy="2" r="2.5" fill="var(--volt)" />
         </svg>
         <Icon className="size-5 text-text-2" />
@@ -406,7 +406,7 @@ export function ActivityBreakdownRow({
         </div>
         <p className="numeric shrink-0 text-sm font-semibold text-text-1">{formatSummaryDuration(ms)}</p>
       </div>
-      <div className="ml-12 mt-2 h-1 rounded-full bg-white/[0.06]">
+      <div className="ml-12 mt-2 h-1 rounded-full bg-[var(--track-soft)]">
         <motion.div
           className="h-full rounded-full"
           style={{ background: activity.color }}

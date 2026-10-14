@@ -60,15 +60,15 @@ export function CharacterPortrait({
         <>
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-[#0a0a10] via-[#0a0a10]/55 to-transparent"
+            className="portrait-fade-bottom pointer-events-none absolute inset-x-0 bottom-0 h-12"
           />
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-[#0a0a10]/70 to-transparent"
+            className="portrait-fade-left pointer-events-none absolute inset-y-0 left-0 w-6"
           />
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-[#0a0a10]/70 to-transparent"
+            className="portrait-fade-right pointer-events-none absolute inset-y-0 right-0 w-6"
           />
           <div
             aria-hidden
@@ -84,7 +84,7 @@ export function CharacterPortrait({
 function NeutralMark({ accent }: { accent: string }) {
   return (
     <svg viewBox="0 0 64 64" className="size-full" aria-hidden>
-      <rect width="64" height="64" fill="#0d0d13" />
+      <rect width="64" height="64" fill="var(--ink-1)" />
       <circle cx="32" cy="32" r="22" fill="none" stroke={accent} strokeOpacity="0.45" strokeWidth="1.5" />
       <circle cx="32" cy="24" r="8" fill={accent} fillOpacity="0.22" />
       <path d="M16 50c3.2-10 10-15 16-15s12.8 5 16 15" fill={accent} fillOpacity="0.18" />

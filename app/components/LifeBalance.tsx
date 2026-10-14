@@ -154,8 +154,8 @@ export function LifeBalanceSection({ tracker, todayKey }: { tracker: TrackerStat
                       .join(", ")}`
               }
             >
-              <circle cx={c} cy={c} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={RING_STROKE} />
-              <circle cx={c} cy={c} r={r - RING_STROKE} fill="none" stroke="rgba(255,255,255,0.06)" strokeDasharray="2 5" />
+              <circle cx={c} cy={c} r={r} fill="none" stroke="var(--orbit-dim)" strokeWidth={RING_STROKE} />
+              <circle cx={c} cy={c} r={r - RING_STROKE} fill="none" stroke="var(--orbit-dim)" strokeDasharray="2 5" />
               {arcs.map(({ area, start, end }, index) => {
                 const isSelected = selectedId === area.id;
                 const dimmed = selected !== null && !isSelected;
@@ -287,7 +287,7 @@ function AreaRow({
         type="button"
         aria-expanded={expanded}
         onClick={onToggle}
-        className="flex min-h-14 w-full items-center gap-3 rounded-[14px] px-2 py-2 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
+        className="flex min-h-14 w-full items-center gap-3 rounded-[14px] px-2 py-2 text-left transition-colors hover:bg-[var(--wash)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
         style={expanded ? { background: tint(area.color, 0.1) } : undefined}
       >
         <span
@@ -305,7 +305,7 @@ function AreaRow({
               <span className="ml-2 text-xs font-medium text-text-3">{formatShare(area.share)}</span>
             </span>
           </span>
-          <span className="mt-1 block h-1 overflow-hidden rounded-full bg-white/[0.06]">
+          <span className="mt-1 block h-1 overflow-hidden rounded-full bg-[var(--track-soft)]">
             <motion.span
               className="block h-full rounded-full"
               style={{ background: area.color }}

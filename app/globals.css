@@ -29,6 +29,46 @@
   --ember: #ffb47d;
   --danger: #ff8a8a;
 
+  --track: rgba(255, 255, 255, 0.1);
+  --track-soft: rgba(255, 255, 255, 0.06);
+  --wash: rgba(255, 255, 255, 0.04);
+  --wash-strong: rgba(255, 255, 255, 0.08);
+  --handle: rgba(255, 255, 255, 0.2);
+  --overlay: rgba(0, 0, 0, 0.7);
+  --orbit: rgba(255, 255, 255, 0.08);
+  --orbit-dim: rgba(255, 255, 255, 0.06);
+  --sheen: rgba(255, 255, 255, 0.025);
+  --inset-line: rgba(255, 255, 255, 0.04);
+  --dock: #0a0a10;
+  --dock-line: rgba(255, 255, 255, 0.08);
+  --shadow: rgba(0, 0, 0, 0.9);
+  --placeholder: rgba(244, 243, 250, 0.36);
+  --primary-hover: #ffffff;
+  --electric-ink: #07070b;
+  --electric-mid: #7f9dff;
+  --ghost-hover: rgba(255, 255, 255, 0.28);
+  --portrait-edge: #0a0a10;
+  --hatch: rgba(255, 255, 255, 0.025);
+  --tick: rgba(255, 255, 255, 0.12);
+  --stripe: rgba(255, 255, 255, 0.22);
+  --bar-inset: rgba(255, 255, 255, 0.25);
+  --sheet-shadow: rgba(0, 0, 0, 1);
+  --auth-glow: rgba(142, 123, 255, 0.2);
+  --auth-glow-ice: rgba(95, 227, 255, 0.07);
+  --auth-glow-soft: rgba(142, 123, 255, 0.08);
+  --glass: rgba(13, 13, 19, 0.72);
+  --success-ink: #c9fbe7;
+  --danger-ink: #ffd0d0;
+  --danger-soft: #ffc4c4;
+  --warm-ink: #ffd3b0;
+  --ice-ink: #cff6ff;
+  --selection: #ffffff;
+  --ambient-volt: rgba(142, 123, 255, 0.16);
+  --ambient-ice: rgba(95, 227, 255, 0.05);
+  --arena-veil: radial-gradient(80% 70% at 8% 8%, rgba(142, 123, 255, 0.22), transparent 50%),
+    radial-gradient(80% 70% at 92% 8%, rgba(95, 227, 255, 0.16), transparent 50%),
+    linear-gradient(180deg, #14141d, #0a0a10 72%);
+
   --radius-sm: 12px;
   --radius-md: 18px;
   --radius-lg: 24px;
@@ -69,6 +109,69 @@
   --ease-tap: var(--ease-out);
 }
 
+/* Light appearance. Dark tokens above stay the default. */
+:root[data-theme="light"] {
+  --background: #f8f9fd;
+  --foreground: #171824;
+  --ink-0: #f8f9fd;
+  --ink-1: #ffffff;
+  --ink-2: #f3f4fa;
+  --ink-3: #e7e9f2;
+  --ink-4: #dce0ec;
+  --line: rgba(23, 24, 36, 0.08);
+  --line-strong: rgba(23, 24, 36, 0.14);
+  --text-1: #171824;
+  --text-2: #575d70;
+  --text-3: #5c6276;
+  --volt: #765ce0;
+  --volt-hi: #5a3ec0;
+  --ice: #08748c;
+  --mint: #087b62;
+  --ember: #8c4e12;
+  --danger: #b42318;
+  --track: rgba(23, 24, 36, 0.1);
+  --track-soft: rgba(23, 24, 36, 0.06);
+  --wash: rgba(23, 24, 36, 0.04);
+  --wash-strong: rgba(23, 24, 36, 0.08);
+  --handle: rgba(23, 24, 36, 0.18);
+  --overlay: rgba(23, 24, 36, 0.46);
+  --orbit: rgba(23, 24, 36, 0.12);
+  --orbit-dim: rgba(23, 24, 36, 0.08);
+  --sheen: rgba(255, 255, 255, 0.7);
+  --inset-line: rgba(255, 255, 255, 0.8);
+  --dock: #ffffff;
+  --dock-line: rgba(23, 24, 36, 0.1);
+  --shadow: rgba(23, 24, 36, 0.16);
+  --placeholder: rgba(23, 24, 36, 0.4);
+  --primary-hover: #2a2c3a;
+  --electric-ink: #f8f9fd;
+  --electric-mid: #4d3ec4;
+  --ghost-hover: rgba(23, 24, 36, 0.28);
+  --portrait-edge: #e7e9f6;
+  --hatch: rgba(23, 24, 36, 0.045);
+  --tick: rgba(23, 24, 36, 0.16);
+  --stripe: rgba(23, 24, 36, 0.28);
+  --sheet-shadow: rgba(23, 24, 36, 0.18);
+  --auth-glow: rgba(118, 92, 224, 0.16);
+  --auth-glow-ice: rgba(8, 116, 140, 0.1);
+  --auth-glow-soft: rgba(118, 92, 224, 0.08);
+  --glass: rgba(255, 255, 255, 0.86);
+  --success-ink: #087b62;
+  --danger-ink: #b42318;
+  --danger-soft: #b42318;
+  --warm-ink: #8c4e12;
+  --ice-ink: #08748c;
+  --selection: #171824;
+  --ambient-volt: rgba(118, 92, 224, 0.14);
+  --ambient-ice: rgba(8, 116, 140, 0.08);
+  --arena-veil: radial-gradient(80% 70% at 8% 8%, rgba(118, 92, 224, 0.18), transparent 55%),
+    radial-gradient(80% 70% at 92% 8%, rgba(8, 116, 140, 0.12), transparent 55%),
+    linear-gradient(180deg, #e7e9f6, #f8f9fd 72%);
+  color-scheme: light;
+}
+
+/* end light theme */
+
 html {
   background: var(--background);
   -webkit-tap-highlight-color: transparent;
@@ -94,8 +197,8 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(60% 38% at 82% -6%, rgba(142, 123, 255, 0.16), transparent 70%),
-    radial-gradient(50% 30% at -10% 30%, rgba(95, 227, 255, 0.05), transparent 70%);
+    radial-gradient(60% 38% at 82% -6%, var(--ambient-volt), transparent 70%),
+    radial-gradient(50% 30% at -10% 30%, var(--ambient-ice), transparent 70%);
 }
 
 * {
@@ -104,7 +207,7 @@ body::before {
 
 ::selection {
   background: rgba(142, 123, 255, 0.35);
-  color: #ffffff;
+  color: var(--selection);
 }
 
 :focus-visible {
@@ -117,14 +220,14 @@ body::before {
     position: relative;
     border-radius: var(--radius-lg);
     border: 1px solid var(--line);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0) 40%), var(--ink-1);
+    background: linear-gradient(180deg, var(--sheen), transparent 40%), var(--ink-1);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.04),
-      0 24px 48px -36px rgba(0, 0, 0, 0.9);
+      inset 0 1px 0 var(--inset-line),
+      0 24px 48px -36px var(--shadow);
   }
 
   .glass {
-    background: rgba(13, 13, 19, 0.72);
+    background: var(--glass);
     border: 1px solid var(--line-strong);
     backdrop-filter: blur(18px) saturate(140%);
     -webkit-backdrop-filter: blur(18px) saturate(140%);
@@ -164,7 +267,7 @@ body::before {
   }
 
   .field::placeholder {
-    color: rgba(244, 243, 250, 0.36);
+    color: var(--placeholder);
   }
 
   .field:focus-visible {
@@ -200,23 +303,23 @@ body::before {
   }
 
   .btn-primary:hover:not(:disabled) {
-    background: #ffffff;
+    background: var(--primary-hover);
   }
 
   .btn-ghost {
     border: 1px solid var(--line-strong);
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--wash);
     color: var(--text-1);
   }
 
   .btn-ghost:hover:not(:disabled) {
-    border-color: rgba(255, 255, 255, 0.28);
+    border-color: var(--ghost-hover);
   }
 
   .btn-electric {
     position: relative;
-    background: linear-gradient(120deg, var(--volt) 0%, #7f9dff 55%, var(--ice) 100%);
-    color: var(--ink-0);
+    background: linear-gradient(120deg, var(--volt) 0%, var(--electric-mid) 55%, var(--ice) 100%);
+    color: var(--electric-ink);
     box-shadow:
       0 0 0 1px rgba(255, 255, 255, 0.12) inset,
       0 14px 34px -16px rgba(142, 123, 255, 0.85);
@@ -232,11 +335,11 @@ body::before {
     border-radius: var(--radius-lg);
     border: 1px solid var(--line-strong);
     background:
-      linear-gradient(180deg, rgba(142, 123, 255, 0.07), rgba(95, 227, 255, 0) 45%),
-      rgba(13, 13, 19, 0.82);
+      linear-gradient(180deg, var(--ambient-volt), transparent 45%),
+      var(--glass);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.05),
-      0 30px 60px -40px rgba(0, 0, 0, 1);
+      inset 0 1px 0 var(--inset-line),
+      0 30px 60px -40px var(--shadow);
   }
 
   .auth-field {
@@ -245,7 +348,7 @@ body::before {
   }
 
   .auth-field.is-invalid {
-    border-color: rgba(255, 138, 138, 0.6);
+    border-color: color-mix(in srgb, var(--danger) 60%, transparent);
   }
 
   .auth-field:disabled {
@@ -261,9 +364,9 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(70% 40% at 50% 0%, rgba(142, 123, 255, 0.2), transparent 70%),
-    radial-gradient(50% 30% at 100% 60%, rgba(95, 227, 255, 0.07), transparent 70%),
-    radial-gradient(40% 30% at 0% 90%, rgba(142, 123, 255, 0.08), transparent 70%);
+    radial-gradient(70% 40% at 50% 0%, var(--auth-glow), transparent 70%),
+    radial-gradient(50% 30% at 100% 60%, var(--auth-glow-ice), transparent 70%),
+    radial-gradient(40% 30% at 0% 90%, var(--auth-glow-soft), transparent 70%);
 }
 
 .busy-orbit {
@@ -271,7 +374,7 @@ body::before {
   width: 16px;
   height: 16px;
   border-radius: 999px;
-  border: 1.5px solid rgba(7, 7, 11, 0.35);
+  border: 1.5px solid color-mix(in srgb, var(--ink-0) 35%, transparent);
   animation: orbit-spin 0.9s linear infinite;
 }
 
@@ -336,6 +439,28 @@ body::before {
 
 [data-motion="expressive"] .ambient-breathe {
   animation: breathe 3.2s ease-in-out infinite;
+}
+
+.arena-stage {
+  background: var(--arena-veil);
+}
+
+.portrait-fade-bottom {
+  background: linear-gradient(to top, var(--portrait-edge), color-mix(in srgb, var(--portrait-edge) 55%, transparent), transparent);
+}
+
+.portrait-fade-left {
+  background: linear-gradient(to right, color-mix(in srgb, var(--portrait-edge) 70%, transparent), transparent);
+}
+
+.portrait-fade-right {
+  background: linear-gradient(to left, color-mix(in srgb, var(--portrait-edge) 70%, transparent), transparent);
+}
+
+.arena-vs {
+  background: rgba(11, 11, 18, 0.92);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #f4f3fa;
 }
 
 .arena-vs-energy {

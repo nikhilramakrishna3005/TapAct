@@ -422,7 +422,7 @@ export function DuelsView({
       )}
 
       {unsynced && (
-        <p role="status" className="mt-2 rounded-2xl border border-ember/30 bg-ember/[0.07] px-3 py-2 text-xs text-[#FFD3B0]">
+        <p role="status" className="mt-2 rounded-2xl border border-ember/30 bg-ember/[0.07] px-3 py-2 text-xs text-[var(--warm-ink)]">
           {sync.status === "offline"
             ? "You're offline. Challenge scores aren't final until tracking syncs."
             : "Some tracking hasn't synced yet, so these scores aren't final."}

@@ -111,7 +111,7 @@ export function ChooseCharacter({
             initial={motionPrefs.reduced ? false : { opacity: 0.7, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={enter}
-            className="rounded-[22px] border border-line bg-[radial-gradient(120%_90%_at_50%_0%,rgba(142,123,255,0.16),transparent_55%),#0d0d13] px-4 py-4 text-center"
+            className="rounded-[22px] border border-line bg-[radial-gradient(120%_90%_at_50%_0%,rgba(142,123,255,0.16),transparent_55%),var(--ink-1)] px-4 py-4 text-center"
             style={{ boxShadow: `inset 0 0 40px ${accent.hex}14` }}
           >
             <CharacterPortrait character={draft} name={archetype.name} size="xl" />

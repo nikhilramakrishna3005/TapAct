@@ -87,11 +87,11 @@ export function HistoryView({
             onClick={() => selectDay(shiftDayKey(safeSelectedKey, -1))}
             disabled={!canGoBack}
             aria-label="Previous day"
-            className="grid size-11 place-items-center rounded-full border border-line-strong bg-ink-1 text-text-1 transition-colors hover:border-white/30 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
+            className="grid size-11 place-items-center rounded-full border border-line-strong bg-ink-1 text-text-1 transition-colors hover:border-line-strong disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
           >
             <ChevronLeft className="size-4" />
           </button>
-          <label className="relative min-w-0 cursor-pointer rounded-2xl px-3 py-1 text-center transition-colors hover:bg-white/[0.04] focus-within:ring-2 focus-within:ring-volt-hi">
+          <label className="relative min-w-0 cursor-pointer rounded-2xl px-3 py-1 text-center transition-colors hover:bg-[var(--wash)] focus-within:ring-2 focus-within:ring-volt-hi">
             <span className="block text-base font-semibold tracking-[-0.01em] text-text-1">
               {describeDay(safeSelectedKey, todayKey)}
             </span>
@@ -131,7 +131,7 @@ export function HistoryView({
             onClick={() => selectDay(shiftDayKey(safeSelectedKey, 1))}
             disabled={!canGoForward}
             aria-label="Next day"
-            className="grid size-11 place-items-center rounded-full border border-line-strong bg-ink-1 text-text-1 transition-colors hover:border-white/30 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
+            className="grid size-11 place-items-center rounded-full border border-line-strong bg-ink-1 text-text-1 transition-colors hover:border-line-strong disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
           >
             <ChevronRight className="size-4" />
           </button>
@@ -167,7 +167,7 @@ export function HistoryView({
                 </p>
                 <p className="numeric mt-0.5 text-lg font-semibold text-text-1">{date.getDate()}</p>
                 <span
-                  className={`mx-auto mt-1 block size-1 rounded-full ${hasTime ? "bg-ice" : "bg-white/15"}`}
+                  className={`mx-auto mt-1 block size-1 rounded-full ${hasTime ? "bg-ice" : "bg-[var(--track)]"}`}
                 />
               </button>
             );

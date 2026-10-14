@@ -145,7 +145,7 @@ function DemoTile({
       >
         <span
           className={`size-1.5 rounded-full ${running ? "ambient-pulse" : ""}`}
-          style={{ background: running ? color : "rgba(255,255,255,0.3)" }}
+          style={{ background: running ? color : "var(--handle)" }}
         />
         {running ? "Running" : elapsed ? "Paused" : "Ready"}
       </span>
@@ -303,7 +303,7 @@ export function Onboarding({ onFinish }: { onFinish: (starters: StarterActivity[
                   initial={false}
                   animate={{
                     width: item === step ? 22 : 8,
-                    backgroundColor: STEPS.indexOf(item) <= index ? "var(--volt)" : "rgba(255,255,255,0.15)",
+                    backgroundColor: STEPS.indexOf(item) <= index ? "var(--volt)" : "var(--track)",
                   }}
                   transition={TRANSITION_BASE}
                 />
