@@ -14,6 +14,7 @@ import {
 } from "@/lib/insights";
 import { DURATION, EASE_OUT } from "@/lib/motion";
 import type { TrackerState } from "@/lib/tracker";
+import { NotificationScreenHeader as ScreenHeader } from "./duels/NotificationInbox";
 import { LifeBalanceSection } from "./LifeBalance";
 import {
   ActivityBreakdownRow,
@@ -21,7 +22,6 @@ import {
   formatCompactHours,
   formatSummaryDuration,
   Ring,
-  ScreenHeader,
   SectionCard,
   Segmented,
 } from "./ui";

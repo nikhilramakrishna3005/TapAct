@@ -138,6 +138,56 @@ describe("duel migration authorization", () => {
     expect(rules).not.toMatch(/grant (insert|update|delete|select) on public\.tapact_duel/i);
   });
 
+  it("keeps duel notifications private, idempotent, and free of scoring changes", () => {
+    const notes = readFileSync(resolve(process.cwd(), "supabase/migrations/20261014180000_tapact_duel_notifications.sql"), "utf8");
+    expect(notes).toContain("create table if not exists public.tapact_notifications");
+    expect(notes).toContain("alter table public.tapact_notifications enable row level security");
+    expect(notes).toContain("alter table public.tapact_notifications force row level security");
+    expect(notes).toContain("revoke all on public.tapact_notifications from anon, authenticated");
+    expect(notes).toContain("recipient_id = (select auth.uid())");
+    expect(notes).toContain("on conflict (recipient_id, dedupe_key) do nothing");
+    expect(notes).toContain("where n.recipient_id = uid");
+    expect(notes).toContain("where id = p_id and recipient_id = uid");
+    expect(notes).toContain("where recipient_id = uid and read_at is null");
+    expect(notes).toContain("new.creator_id is distinct from auth.uid()");
+    expect(notes).toContain("m.user_id <> new.proposer_id");
+    expect(notes).toContain("new.proposer_id is distinct from auth.uid()");
+    expect(notes).toContain("m.user_id <> new.user_id");
+    expect(notes).toContain("'invite_accepted:' || new.id::text");
+    expect(notes).toContain("'duel_started:' || d.id::text");
+    expect(notes).toContain("'proposal_received:' || new.id::text");
+    expect(notes).toContain("'proposal_approved:' || new.id::text");
+    expect(notes).toContain("'proposal_rejected:' || new.id::text");
+    expect(notes).toContain("'rules_effective:' || rule.id::text");
+    expect(notes).toContain("'duel_finished:' || new.id::text");
+    expect(notes).toContain("'opponent_left:' || new.duel_id::text || ':' || new.user_id::text");
+    expect(notes).toContain("does not run a background scheduler");
+    expect(notes).toContain("order by d0.id");
+    expect(notes).toContain("(d.starts_on + d.duration_days)::timestamp at time zone my_zone");
+    expect(notes).toContain("(d.starts_on + d.duration_days)::timestamp at time zone friend_zone");
+    expect(notes).toContain("where id = d.id and status = 'active'");
+    expect(notes).not.toContain("payload");
+    expect(notes).not.toContain("tapact_time_entries");
+    expect(notes).not.toContain("share_live");
+    expect(notes).not.toContain("email");
+    expect(notes).not.toContain("create or replace function public.tapact_duel_board");
+    expect(notes).not.toContain("create or replace function public.tapact_duel_timer_minutes");
+    expect(notes).not.toContain("create or replace function public.tapact_duel_member_score");
+    expect(notes).not.toMatch(/set\s+constraints/i);
+    expect(notes).not.toMatch(/grant (insert|update|delete|select) on public\.tapact_notifications/i);
+    expect(notes).toContain("revoke all on function public.tapact_emit_notification(uuid, text, uuid, uuid, text, text, text) from public, anon, authenticated");
+    expect(notes).toContain("grant execute on function public.tapact_list_notifications(integer, timestamptz, uuid) to authenticated");
+    expect(notes).toContain("grant execute on function public.tapact_mark_notification_read(uuid) to authenticated");
+    expect(notes).toContain("grant execute on function public.tapact_mark_all_notifications_read() to authenticated");
+    expect(notes).toContain("grant execute on function public.tapact_reconcile_duel_notifications() to authenticated");
+    const bodies = notes.split(/create or replace function/i).slice(1);
+    expect(bodies.length).toBeGreaterThan(0);
+    for (const body of bodies) {
+      expect(body).toContain("security definer");
+      expect(body).toContain("set search_path = ''");
+    }
+  });
+
   it("stores invite tokens only as hashes and scores timer sessions", () => {
     expect(sql).toContain("token_hash");
     expect(sql).not.toMatch(/token text not null/);

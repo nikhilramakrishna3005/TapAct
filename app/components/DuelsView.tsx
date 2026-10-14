@@ -24,6 +24,7 @@ import {
   type DuelMenuAction,
 } from "@/lib/duels/manage";
 import { isCurrentBoardResponse, showcaseHistoryKey } from "@/lib/duels/navigation";
+import { resolveDuelNotificationTarget } from "@/lib/duels/notifications";
 import { battleFromBoard, type ShowcaseBattle } from "@/lib/duels/showcase";
 import type { TrackerState } from "@/lib/tracker";
 import type { TrackerUpdate } from "@/lib/trackerStore";
@@ -37,16 +38,23 @@ import { CharacterPortrait } from "./duels/CharacterPortrait";
 import { ChooseCharacter } from "./duels/ChooseCharacter";
 import { CreateDuelSheet } from "./duels/CreateDuelSheet";
 import { DuelArena } from "./duels/DuelArena";
-import { EmptyState, ScreenHeader, Sheet } from "./ui";
+import { NotificationScreenHeader as ScreenHeader } from "./duels/NotificationInbox";
+import { EmptyState, Sheet } from "./ui";
 
 export function DuelsView({
   tracker,
   commit,
   activeActivityId,
+  notificationRequest = null,
+  onNotificationHandled,
+  notificationSync = 0,
 }: {
   tracker: TrackerState;
   commit: (update: TrackerUpdate) => void;
   activeActivityId: string | null;
+  notificationRequest?: { duelId: string; nonce: number } | null;
+  onNotificationHandled?: () => void;
+  notificationSync?: number;
 }) {
   const auth = useAuth();
   const sync = useCloudSync();
@@ -74,6 +82,7 @@ export function DuelsView({
   const selectedRef = useRef<string | null>(null);
   const latestBoardGen = useRef(0);
   const historyKeyRef = useRef<string | null>(null);
+  const seenNotice = useRef<number | null>(null);
   selectedRef.current = selected;
 
   const applyCharacterToBoards = useCallback((next: DuelCharacterPublic | null) => {
@@ -213,6 +222,38 @@ export function DuelsView({
     const { main } = partitionDuelLists(items);
     setSelected((current) => current ?? main.find((item) => item.status === "active")?.id ?? main.find((item) => item.status === "pending")?.id ?? null);
   }, [items]);
+
+  useEffect(() => {
+    if (!notificationRequest || !items || !onNotificationHandled) return;
+    if (seenNotice.current === notificationRequest.nonce) return;
+    seenNotice.current = notificationRequest.nonce;
+    const target = resolveDuelNotificationTarget({
+      duelId: notificationRequest.duelId,
+      duels: items,
+    });
+    if (target.ok) {
+      setError(null);
+      setNote(null);
+      setSelected(target.duelId);
+    } else {
+      setError(target.message);
+    }
+    onNotificationHandled();
+  }, [items, notificationRequest, onNotificationHandled]);
+
+  useEffect(() => {
+    if (!notificationSync || auth.status !== "signed-in") return;
+    let cancelled = false;
+    loadList({ history: false }).catch((caught) => {
+      if (!cancelled) setError(duelError(caught));
+    });
+    if (selectedRef.current) {
+      void loadBoard(selectedRef.current).catch(() => undefined);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.status, loadBoard, loadList, notificationSync]);
 
   useEffect(() => {
     if (!selected || auth.status !== "signed-in") return;

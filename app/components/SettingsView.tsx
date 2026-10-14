@@ -33,8 +33,9 @@ import type {
 } from "@/lib/trackerStore";
 import { AccountSection } from "./AccountSection";
 import { useCloudSync } from "./CloudSync";
+import { NotificationScreenHeader as ScreenHeader } from "./duels/NotificationInbox";
 import { useMotionPrefs } from "./MotionPrefs";
-import { formatSummaryDuration, ScreenHeader, SectionCard, Segmented } from "./ui";
+import { formatSummaryDuration, SectionCard, Segmented } from "./ui";
 
 type Feedback = { tone: "success" | "error"; message: string };
 
