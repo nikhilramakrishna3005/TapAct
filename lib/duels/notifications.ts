@@ -15,9 +15,9 @@ export const TIME_BASED_NOTIFICATION_EVENTS = ["duel_started", "rules_effective"
 
 export type TimeBasedNotificationEvent = (typeof TIME_BASED_NOTIFICATION_EVENTS)[number];
 
-/** Shown in product copy and tests. There is no push channel and no cron in this phase. */
+/** Time-based inbox rows are still created by reconcile. PostgreSQL itself does not schedule them. */
 export const NOTIFICATION_DELIVERY_LIMIT =
-  "Time-based duel notices are written when a signed-in refresh runs. TapAct does not run a background scheduler for them.";
+  "Time-based duel notices are written when a signed-in refresh or the push worker runs. PostgreSQL does not run a background scheduler for them.";
 
 export type DuelNotification = {
   id: string;

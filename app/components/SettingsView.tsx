@@ -32,6 +32,7 @@ import type {
   WritableStorageLike,
 } from "@/lib/trackerStore";
 import { AccountSection } from "./AccountSection";
+import { PushSettings } from "./PushSettings";
 import { useCloudSync } from "./CloudSync";
 import { NotificationScreenHeader as ScreenHeader } from "./duels/NotificationInbox";
 import { useMotionPrefs } from "./MotionPrefs";
@@ -265,6 +266,8 @@ export function SettingsView({
       </AnimatePresence>
 
       <AccountSection />
+
+      <PushSettings platform={platform} installed={installed} />
 
       <SectionCard title="Motion" aside={<Sparkles className="size-4 text-text-3" />}>
         <div className="space-y-4">

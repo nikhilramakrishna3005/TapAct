@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { type AccountSummary, summarizeUser } from "@/lib/auth/account";
+import { releaseDevicePushSubscription } from "@/lib/push/browser";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export type AuthStatus = "loading" | "signed-in" | "signed-out" | "unavailable";
@@ -53,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     try {
+      await releaseDevicePushSubscription();
       // Supabase removes the local session even if the network call fails.
       await supabase.auth.signOut({ scope: "local" });
     } finally {
