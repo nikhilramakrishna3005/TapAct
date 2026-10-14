@@ -54,10 +54,12 @@ export type DuelBoard = {
     muted: boolean;
     creator?: boolean;
     todayKey: string;
+    /** Frozen IANA zone saved when this member joined. */
+    timeZone?: string;
     character: DuelCharacterPublic | null;
     mappings: { challengeActivityId: string; trackerActivityId: string }[];
   };
-  friend: { name: string; score: number; status: string; character: DuelCharacterPublic | null } | null;
+  friend: { name: string; score: number; status: string; timeZone?: string; character: DuelCharacterPublic | null } | null;
   youDays: BoardDay[];
   friendDays: BoardDay[];
   presence: { name: string; activity: string; activityId: string } | null;
