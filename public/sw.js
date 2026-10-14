@@ -48,6 +48,63 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+function safeNotificationPath(raw) {
+  try {
+    const url = new URL(String(raw || ""), self.location.origin);
+    if (url.origin !== self.location.origin || url.pathname !== "/") return "/?tab=duels";
+    if (url.searchParams.get("tab") !== "duels") return "/?tab=duels";
+    const duel = url.searchParams.get("duel");
+    if (duel && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(duel)) {
+      return "/?tab=duels";
+    }
+    const next = new URL("/", self.location.origin);
+    next.searchParams.set("tab", "duels");
+    if (duel) next.searchParams.set("duel", duel);
+    return `${next.pathname}${next.search}`;
+  } catch {
+    return "/?tab=duels";
+  }
+}
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = {};
+  }
+  const title = typeof payload.title === "string" && payload.title.trim() ? payload.title.slice(0, 80) : "TapAct";
+  const body = typeof payload.body === "string" ? payload.body.slice(0, 180) : "";
+  const target = safeNotificationPath(payload.url);
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: "/pwa-icons/icon-192.png",
+      badge: "/pwa-icons/icon-192.png",
+      tag: typeof payload.tag === "string" ? payload.tag.slice(0, 80) : "tapact",
+      data: { url: target },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = safeNotificationPath(event.notification.data && event.notification.data.url);
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (windowClients) => {
+      for (const client of windowClients) {
+        if (new URL(client.url).origin !== self.location.origin) continue;
+        await client.focus();
+        if (typeof client.navigate === "function") {
+          await client.navigate(target);
+        }
+        return;
+      }
+      await self.clients.openWindow(target);
+    }),
+  );
+});
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;

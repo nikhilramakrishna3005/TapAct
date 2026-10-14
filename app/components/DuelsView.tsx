@@ -83,6 +83,7 @@ export function DuelsView({
   const latestBoardGen = useRef(0);
   const historyKeyRef = useRef<string | null>(null);
   const seenNotice = useRef<number | null>(null);
+  const urlDuel = useRef<string | null>(null);
   selectedRef.current = selected;
 
   const applyCharacterToBoards = useCallback((next: DuelCharacterPublic | null) => {
@@ -162,7 +163,10 @@ export function DuelsView({
   useEffect(() => {
     const url = new URL(window.location.href);
     const duel = url.searchParams.get("duel");
-    if (duel) setSelected(duel);
+    if (duel) {
+      urlDuel.current = duel;
+      setSelected(duel);
+    }
     if (url.searchParams.get("connect") === "1") {
       setConnectOnOpen(true);
       url.searchParams.delete("connect");
@@ -221,6 +225,19 @@ export function DuelsView({
     opened.current = true;
     const { main } = partitionDuelLists(items);
     setSelected((current) => current ?? main.find((item) => item.status === "active")?.id ?? main.find((item) => item.status === "pending")?.id ?? null);
+  }, [items]);
+
+  useEffect(() => {
+    if (!urlDuel.current || !items) return;
+    const requested = urlDuel.current;
+    urlDuel.current = null;
+    const target = resolveDuelNotificationTarget({ duelId: requested, duels: items });
+    if (target.ok) {
+      setSelected(target.duelId);
+      return;
+    }
+    setSelected((current) => (current === requested ? null : current));
+    setError(target.message);
   }, [items]);
 
   useEffect(() => {
