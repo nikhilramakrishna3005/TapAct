@@ -13,12 +13,12 @@ import {
 } from "@/lib/insights";
 import { MS_PER_MINUTE, type TrackerState } from "@/lib/tracker";
 import { DayReplay } from "./DayReplay";
+import { NotificationScreenHeader as ScreenHeader } from "./duels/NotificationInbox";
 import { OrbitTimeline } from "./OrbitTimeline";
 import {
   ActivityBreakdownRow,
   EmptyState,
   formatSummaryDuration,
-  ScreenHeader,
   SectionCard,
   StatTile,
 } from "./ui";

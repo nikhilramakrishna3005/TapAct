@@ -46,6 +46,7 @@ import { ActivityCard } from "./components/ActivityCard";
 import { AuthProvider, useAuth } from "./components/AuthProvider";
 import { CloudSyncProvider } from "./components/CloudSync";
 import { DuelsView } from "./components/DuelsView";
+import { DuelNotificationProvider, NotificationBellButton } from "./components/duels/NotificationInbox";
 import { duelsApi } from "@/lib/duels/api";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { type AppTab, FocusDock } from "./components/FocusDock";
@@ -311,6 +312,8 @@ function Home() {
   const [hydrated, setHydrated] = useState(false);
   const [onboarding, setOnboarding] = useState<OnboardingPhase>("pending");
   const [tab, setTab] = useState<Tab>("home");
+  const [duelNotice, setDuelNotice] = useState<{ duelId: string; nonce: number } | null>(null);
+  const [notificationSync, setNotificationSync] = useState(0);
   const [persistFailure, setPersistFailure] = useState<PersistFailureReason | null>(null);
   const [milestone, setMilestone] = useState<Milestone | null>(null);
   const metGoalsRef = useRef<{ dayKey: string; ids: Set<string> } | null>(null);
@@ -522,6 +525,16 @@ function Home() {
     [commit, setPreferences],
   );
 
+  const handleNotificationHandled = useCallback(() => {
+    setDuelNotice(null);
+  }, []);
+
+  const openNotifiedDuel = useCallback((duelId: string) => {
+    setDuelNotice({ duelId, nonce: Date.now() });
+    setTab("duels");
+    window.scrollTo({ top: 0 });
+  }, []);
+
   const resetAddForm = useCallback(() => {
     setDraft(EMPTY_DRAFT);
     setDraftError(null);
@@ -638,6 +651,11 @@ function Home() {
 
   return (
     <CloudSyncProvider commit={commit} tracker={tracker}>
+    <DuelNotificationProvider
+      enabled={auth.status === "signed-in"}
+      onOpenDuel={openNotifiedDuel}
+      onSynced={() => setNotificationSync((value) => value + 1)}
+    >
     <div className="min-h-screen text-text-1">
       <motion.main
         className="mx-auto w-full max-w-[430px] px-5 pb-[calc(124px+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))]"
@@ -656,7 +674,14 @@ function Home() {
             {tab === "insights" ? (
               <InsightsView tracker={liveTracker} todayKey={todayKey} />
             ) : tab === "duels" ? (
-              <DuelsView tracker={tracker} commit={commit} activeActivityId={tracker.activeActivityId} />
+              <DuelsView
+                tracker={tracker}
+                commit={commit}
+                activeActivityId={tracker.activeActivityId}
+                notificationRequest={duelNotice}
+                onNotificationHandled={handleNotificationHandled}
+                notificationSync={notificationSync}
+              />
             ) : tab === "history" ? (
               <HistoryView tracker={liveTracker} todayKey={todayKey} nowMs={nowMs} />
             ) : tab === "settings" ? (
@@ -673,7 +698,8 @@ function Home() {
                     <OrbitMark size={26} spin={activeActivity !== null} />
                     <span className="text-[1.05rem] font-semibold tracking-[-0.03em]">TapAct</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <NotificationBellButton />
                     <p className="text-xs font-medium text-text-3">{formatTodayLabel(nowMs)}</p>
                     {auth.status !== "unavailable" && (
                       <button
@@ -1001,6 +1027,7 @@ function Home() {
         {onboarding === "show" && <Onboarding key="onboarding" onFinish={handleOnboardingFinish} />}
       </AnimatePresence>
     </div>
+    </DuelNotificationProvider>
     </CloudSyncProvider>
   );
 }

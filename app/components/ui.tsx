@@ -159,17 +159,22 @@ export function ScreenHeader({
   title,
   children,
   compact = false,
+  trailing,
 }: {
   eyebrow: string;
   title: string;
   children?: React.ReactNode;
   compact?: boolean;
+  trailing?: React.ReactNode;
 }) {
   return (
     <header className={compact ? "pt-1" : "pt-2"}>
-      <div className="flex items-center gap-2">
-        <OrbitMark size={18} />
-        <p className="eyebrow">{eyebrow}</p>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <OrbitMark size={18} />
+          <p className="eyebrow">{eyebrow}</p>
+        </div>
+        {trailing}
       </div>
       <h1 className={`display ${compact ? "mt-1 text-[1.45rem]" : "mt-3 text-[2rem]"}`}>{title}</h1>
       {children}

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { asPublicCharacter, type DuelCharacterPublic } from "./character";
+import { asNotificationPage, type NotificationPage } from "./notifications";
 import { zonedDayKey } from "./score";
 
 export type DuelListItem = {
@@ -169,7 +170,23 @@ export const duelsApi = {
   withdrawProposal: (client: SupabaseClient, proposalId: string) => call<void>(client, "tapact_withdraw_duel_proposal", { p_proposal: proposalId }),
   syncPresence: (client: SupabaseClient, trackerActivityId: string | null) =>
     call<void>(client, "tapact_sync_duel_presence", { p_tracker: trackerActivityId }),
+  reconcileNotifications: (client: SupabaseClient) => call<void>(client, "tapact_reconcile_duel_notifications", {}),
+  notifications: async (
+    client: SupabaseClient,
+    cursor: { limit?: number; before?: string | null; beforeId?: string | null } = {},
+  ) => {
+    const args: Record<string, unknown> = { p_limit: cursor.limit ?? 30 };
+    if (cursor.before && cursor.beforeId) {
+      args.p_before = cursor.before;
+      args.p_before_id = cursor.beforeId;
+    }
+    return asNotificationPage(await call<unknown>(client, "tapact_list_notifications", args));
+  },
+  markNotificationRead: (client: SupabaseClient, id: string) => call<void>(client, "tapact_mark_notification_read", { p_id: id }),
+  markAllNotificationsRead: (client: SupabaseClient) => call<void>(client, "tapact_mark_all_notifications_read", {}),
 };
+
+export type { NotificationPage };
 
 export function inviteUrl(token: string): string {
   return `${window.location.origin}/duel/${token}`;
