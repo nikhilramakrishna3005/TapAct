@@ -10,12 +10,13 @@ import {
   MoreVertical,
   Share,
   Sparkles,
+  Sun,
   Smartphone,
   SquarePlus,
   Upload,
   WifiOff,
 } from "lucide-react";
-import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import packageJson from "@/package.json";
 import {
   type BackupSummary,
@@ -36,6 +37,8 @@ import { PushSettings } from "./PushSettings";
 import { useCloudSync } from "./CloudSync";
 import { NotificationScreenHeader as ScreenHeader } from "./duels/NotificationInbox";
 import { useMotionPrefs } from "./MotionPrefs";
+import { applyDocumentTheme } from "./ThemeSync";
+import { resolveAppearanceChoice, resolveTheme, saveAppearance, type AppearanceChoice } from "@/lib/theme";
 import { formatSummaryDuration, SectionCard, Segmented } from "./ui";
 
 type Feedback = { tone: "success" | "error"; message: string };
@@ -110,6 +113,16 @@ export function SettingsView({
   const sync = useCloudSync();
   const cloudBacked = sync.status !== "signed-out" && sync.status !== "unavailable" && sync.decision?.kind === "in-sync";
   const [motionSaveFailed, setMotionSaveFailed] = useState(false);
+  const [appearance, setAppearance] = useState<AppearanceChoice>("dark");
+  const [appearanceSaveFailed, setAppearanceSaveFailed] = useState(false);
+
+  useLayoutEffect(() => {
+    try {
+      setAppearance(resolveAppearanceChoice(window.localStorage));
+    } catch {
+      setAppearance("dark");
+    }
+  }, []);
 
   useEffect(() => {
     setPlatform(detectPlatform());
@@ -251,8 +264,8 @@ export function SettingsView({
             exit={{ opacity: 0, y: -6 }}
             className={`mt-4 flex items-start gap-2 rounded-2xl border px-3 py-2.5 text-xs leading-relaxed ${
               feedback.tone === "success"
-                ? "border-mint/30 bg-mint/[0.07] text-[#C9FBE7]"
-                : "border-danger/30 bg-danger/[0.07] text-[#FFD0D0]"
+                ? "border-mint/30 bg-mint/[0.07] text-[var(--success-ink)]"
+                : "border-danger/30 bg-danger/[0.07] text-[var(--danger-ink)]"
             }`}
           >
             {feedback.tone === "success" ? (
@@ -268,6 +281,44 @@ export function SettingsView({
       <AccountSection />
 
       <PushSettings platform={platform} installed={installed} />
+
+      <SectionCard title="Appearance" aside={<Sun className="size-4 text-text-3" />}>
+        <Segmented
+          label="Appearance"
+          layoutId="settings-appearance"
+          size="md"
+          value={appearance}
+          onChange={(choice) => {
+            setAppearance(choice);
+            let storage: Pick<Storage, "getItem" | "setItem"> | null = null;
+            try {
+              storage = window.localStorage;
+            } catch {
+              storage = null;
+            }
+            setAppearanceSaveFailed(!saveAppearance(storage, choice));
+            const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+            applyDocumentTheme(resolveTheme(choice, systemDark));
+          }}
+          options={[
+            { value: "light", label: "Light" },
+            { value: "dark", label: "Dark" },
+            { value: "system", label: "System" },
+          ]}
+        />
+        <p className="mt-2 text-[0.72rem] leading-relaxed text-text-3">
+          {appearance === "system"
+            ? "Follows this device's appearance, and updates if the device changes."
+            : appearance === "light"
+              ? "A soft light surface with the same violet and teal accents."
+              : "The original graphite theme."}
+        </p>
+        {appearanceSaveFailed && (
+          <p role="status" className="mt-2 text-[0.72rem] text-ember">
+            Applied for this session, but browser storage couldn't save it.
+          </p>
+        )}
+      </SectionCard>
 
       <SectionCard title="Motion" aside={<Sparkles className="size-4 text-text-3" />}>
         <div className="space-y-4">
@@ -471,7 +522,7 @@ export function SettingsView({
                   <button
                     type="button"
                     onClick={confirmImport}
-                    className="btn h-11 flex-1 border border-ember/40 bg-ember/[0.14] text-[#FFE1C8]"
+                    className="btn h-11 flex-1 border border-ember/40 bg-ember/[0.14] text-[var(--warm-ink)]"
                   >
                     Replace data
                   </button>

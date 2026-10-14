@@ -147,7 +147,7 @@ export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; tod
                     className="relative flex h-full min-w-0 flex-1 flex-col justify-end rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
                   >
                     <motion.div
-                      className="flex w-full flex-col-reverse overflow-hidden rounded-[8px] bg-white/[0.05]"
+                      className="flex w-full flex-col-reverse overflow-hidden rounded-[8px] bg-[var(--track-soft)]"
                       initial={{ height: 0 }}
                       animate={{ height: Math.max(height, bar.totalMs > 0 ? 6 : 4) }}
                       transition={{ duration: DURATION.slow, ease: EASE_OUT, delay: index * 0.035 }}

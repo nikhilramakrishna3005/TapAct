@@ -37,7 +37,7 @@ function Meter({ label, minutes, target, met, tone }: { label: string; minutes: 
         <span className="truncate text-text-2">{label}</span>
         <span className="shrink-0 tabular-nums text-text-3">{minutes}/{target} min · {met ? "Goal met" : "Short of target"}</span>
       </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/10" aria-hidden>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--track)]" aria-hidden>
         <div className={`h-full rounded-full ${tone === "you" ? "bg-ice" : "bg-volt"}`} style={{ width: `${width}%` }} />
       </div>
     </div>

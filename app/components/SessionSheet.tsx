@@ -239,7 +239,7 @@ export function SessionEditorSheet({
           <button
             type="button"
             onClick={onDelete}
-            className="mx-auto flex min-h-11 items-center gap-1.5 rounded-full px-4 text-sm font-medium text-[#FFC4C4] transition-colors hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+            className="mx-auto flex min-h-11 items-center gap-1.5 rounded-full px-4 text-sm font-medium text-[var(--danger-soft)] transition-colors hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
           >
             <Trash2 className="size-4" />
             Delete session
@@ -288,7 +288,7 @@ export function DeleteSessionSheet({
             if (result.ok) onClose();
             else setProblem(result.problem.message);
           }}
-          className="btn h-12 flex-1 border border-danger/40 bg-danger/15 text-[#FFD0D0] hover:bg-danger/25"
+          className="btn h-12 flex-1 border border-danger/40 bg-danger/15 text-[var(--danger-ink)] hover:bg-danger/25"
         >
           <Trash2 className="size-4" />
           Delete

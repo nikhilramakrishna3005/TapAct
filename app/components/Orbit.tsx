@@ -83,7 +83,7 @@ export function DayOrbit({
           cy={CENTER}
           r={OUTER_R}
           fill="none"
-          stroke="rgba(255,255,255,0.06)"
+          stroke="var(--orbit-dim)"
           strokeWidth={OUTER_STROKE}
         />
         {complete && (
@@ -124,7 +124,7 @@ export function DayOrbit({
           cy={CENTER}
           r={INNER_R}
           fill="none"
-          stroke="rgba(255,255,255,0.08)"
+          stroke="var(--orbit)"
           strokeWidth={1}
           strokeDasharray="2 6"
         />
@@ -140,7 +140,7 @@ export function DayOrbit({
                 r: satellite.met ? 5 : 3.5,
                 fill: satellite.met ? satellite.color : "rgba(7,7,11,1)",
               }}
-              stroke={satellite.met ? satellite.color : "rgba(255,255,255,0.28)"}
+              stroke={satellite.met ? satellite.color : "var(--tick)"}
               strokeWidth={1.5}
               transition={{ duration: 0.3, ease: EASE_OUT }}
             />

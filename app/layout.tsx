@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import { ServiceWorkerRegister } from "./components/ServiceWorkerRegister";
+import { ThemeSync } from "./components/ThemeSync";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -21,7 +23,6 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#07070b",
-  colorScheme: "dark",
 };
 
 export default function RootLayout({
@@ -31,9 +32,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" data-motion="expressive" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <ThemeSync />
         {children}
         <ServiceWorkerRegister />
       </body>

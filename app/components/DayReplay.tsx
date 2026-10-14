@@ -248,13 +248,13 @@ export function DayReplay({
           <>
             <div className="relative mx-auto mt-3" style={{ width: SIZE, height: SIZE }}>
               <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} aria-hidden="true" className="overflow-visible">
-                <circle cx={CENTER} cy={CENTER} r={RING_R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={16} />
+                <circle cx={CENTER} cy={CENTER} r={RING_R} fill="none" stroke="var(--orbit-dim)" strokeWidth={16} />
                 <circle
                   cx={CENTER}
                   cy={CENTER}
                   r={RING_R - 22}
                   fill="none"
-                  stroke="rgba(255,255,255,0.06)"
+                  stroke="var(--orbit-dim)"
                   strokeDasharray="2 6"
                 />
                 {hourMarks
@@ -269,7 +269,7 @@ export function DayReplay({
                         y1={inner.y}
                         x2={outer.x}
                         y2={outer.y}
-                        stroke="rgba(255,255,255,0.22)"
+                        stroke="var(--tick)"
                         strokeWidth={1.5}
                       />
                     );
@@ -393,7 +393,7 @@ export function DayReplay({
                   scrubbing.current = false;
                 }}
                 onChange={(event) => setClampedProgress(Number(event.target.value) / 1000)}
-                className="h-8 w-full cursor-pointer appearance-none bg-transparent accent-[var(--volt)] [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-white/10 [&::-webkit-slider-thumb]:mt-[-5px] [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-ice"
+                className="h-8 w-full cursor-pointer appearance-none bg-transparent accent-[var(--volt)] [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-[var(--track)] [&::-webkit-slider-thumb]:mt-[-5px] [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-ice"
               />
             </label>
             <div className="mt-1 flex justify-between text-[0.6rem] font-medium text-text-3">
@@ -407,7 +407,7 @@ export function DayReplay({
                 type="button"
                 onClick={restart}
                 aria-label="Restart replay"
-                className="grid size-11 place-items-center rounded-full border border-line-strong bg-ink-1 text-text-1 hover:border-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
+                className="grid size-11 place-items-center rounded-full border border-line-strong bg-ink-1 text-text-1 hover:border-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
               >
                 <RotateCcw className="size-4" />
               </button>
@@ -472,7 +472,7 @@ export function DayReplay({
                           <span className="ml-2 text-xs text-text-3">{formatShare(area.share)}</span>
                         </span>
                       </div>
-                      <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                      <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--track-soft)]">
                         <div className="h-full rounded-full" style={{ width: `${Math.max(area.share * 100, 2)}%`, background: area.color }} />
                       </div>
                     </li>
@@ -506,7 +506,7 @@ export function DayReplay({
 
 function RecapStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[14px] bg-white/[0.04] px-2 py-2 text-center">
+    <div className="rounded-[14px] bg-[var(--wash)] px-2 py-2 text-center">
       <p className="text-[0.55rem] font-semibold uppercase tracking-[0.14em] text-text-3">{label}</p>
       <p className="numeric mt-1 text-sm font-semibold text-text-1">{value}</p>
     </div>

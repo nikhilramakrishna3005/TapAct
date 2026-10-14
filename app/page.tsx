@@ -251,7 +251,7 @@ function MilestoneToast({ milestone, expressive }: { milestone: Milestone; expre
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -10, scale: 0.98 }}
       transition={SPRING_SNAPPY}
-      className="glass pointer-events-auto mx-auto flex w-[calc(100%-24px)] max-w-[366px] items-center gap-3 rounded-[22px] px-3.5 py-3 shadow-[0_24px_50px_-28px_rgba(0,0,0,1)]"
+      className="glass pointer-events-auto mx-auto flex w-[calc(100%-24px)] max-w-[366px] items-center gap-3 rounded-[22px] px-3.5 py-3 shadow-[0_24px_50px_-28px_var(--sheet-shadow)]"
       style={{ borderColor: tint(milestone.color, 0.45) }}
     >
       <span className="relative grid size-10 shrink-0 place-items-center">
@@ -729,7 +729,7 @@ function Home() {
                   <p
                     role="status"
                     aria-live="polite"
-                    className="mt-3 rounded-2xl border border-ember/30 bg-ember/[0.07] px-3 py-2.5 text-xs text-[#FFD3B0]"
+                    className="mt-3 rounded-2xl border border-ember/30 bg-ember/[0.07] px-3 py-2.5 text-xs text-[var(--warm-ink)]"
                   >
                     {persistFailure === "quota"
                       ? "Browser storage is full. Recent tracking changes aren't saved on this device."
@@ -956,7 +956,7 @@ function Home() {
                         <button
                           type="button"
                           onClick={() => handleArchiveActivity(activity)}
-                          className="inline-flex min-h-10 items-center gap-1 rounded-full border border-danger/35 px-3 text-xs font-medium text-[#FFC4C4]"
+                          className="inline-flex min-h-10 items-center gap-1 rounded-full border border-danger/35 px-3 text-xs font-medium text-[var(--danger-soft)]"
                         >
                           <Archive className="size-3.5" />
                           Archive
@@ -1011,7 +1011,7 @@ function Home() {
                   <button
                     type="button"
                     onClick={() => handleArchiveActivity(editingActivity)}
-                    className="mx-auto flex min-h-11 items-center gap-1.5 rounded-full px-4 text-xs font-medium text-[#FFC4C4]"
+                    className="mx-auto flex min-h-11 items-center gap-1.5 rounded-full px-4 text-xs font-medium text-[var(--danger-soft)]"
                   >
                     <Archive className="size-3.5" />
                     Archive this activity

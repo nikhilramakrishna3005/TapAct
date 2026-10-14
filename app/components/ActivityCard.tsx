@@ -59,8 +59,8 @@ export function ActivityCard({
             ? `radial-gradient(120% 90% at 0% 0%, ${tint(color, 0.2)}, transparent 60%), var(--ink-2)`
             : "var(--ink-1)",
           boxShadow: running
-            ? `0 22px 50px -30px ${tint(color, 0.7)}, inset 0 1px 0 rgba(255,255,255,0.06)`
-            : "inset 0 1px 0 rgba(255,255,255,0.03)",
+            ? `0 22px 50px -30px ${tint(color, 0.7)}, inset 0 1px 0 var(--inset-line)`
+            : "inset 0 1px 0 var(--inset-line)",
         }}
       >
         <div className="flex items-center gap-3 pr-12">
@@ -127,7 +127,7 @@ export function ActivityCard({
         </div>
 
         <div className="mt-4">
-          <div className="relative h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+          <div className="relative h-1.5 overflow-hidden rounded-full bg-[var(--track-soft)]">
             <motion.div
               className="absolute inset-y-0 left-0 rounded-full"
               style={{ background: goalMet ? "var(--mint)" : color, opacity: running || goalMet ? 1 : 0.75 }}
@@ -157,7 +157,7 @@ export function ActivityCard({
         type="button"
         onClick={onEdit}
         aria-label={`Edit ${activity.name}`}
-        className="absolute right-2.5 top-2.5 z-10 grid size-11 place-items-center rounded-full text-text-3 transition-colors hover:bg-white/[0.06] hover:text-text-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
+        className="absolute right-2.5 top-2.5 z-10 grid size-11 place-items-center rounded-full text-text-3 transition-colors hover:bg-[var(--wash-strong)] hover:text-text-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
       >
         <PencilLine className="size-4" />
       </button>

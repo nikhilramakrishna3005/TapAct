@@ -132,7 +132,7 @@ export const PasswordField = forwardRef<
                         : strength.score === 2
                           ? "var(--ice)"
                           : "var(--ember)"
-                      : "rgba(255,255,255,0.08)",
+                      : "var(--track)",
                 }}
               />
             ))}
@@ -179,10 +179,10 @@ export function Notice({ tone, children }: { tone: "error" | "info" | "success";
   const Icon = tone === "error" ? AlertTriangle : tone === "success" ? CheckCircle2 : Info;
   const styles =
     tone === "error"
-      ? "border-danger/30 bg-danger/[0.07] text-[#FFD0D0]"
+      ? "border-danger/30 bg-danger/[0.07] text-[var(--danger-ink)]"
       : tone === "success"
-        ? "border-mint/30 bg-mint/[0.07] text-[#C9FBE7]"
-        : "border-ice/25 bg-ice/[0.06] text-[#CFF6FF]";
+        ? "border-mint/30 bg-mint/[0.07] text-[var(--success-ink)]"
+        : "border-ice/25 bg-ice/[0.06] text-[var(--ice-ink)]";
   return (
     <motion.div
       role={tone === "error" ? "alert" : "status"}

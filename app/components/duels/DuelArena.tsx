@@ -148,7 +148,7 @@ export function DuelArena({
               <summary className="grid size-11 cursor-pointer list-none place-items-center text-xs font-semibold text-text-3 [&::-webkit-details-marker]:hidden" aria-label="Duel details">
                 Info
               </summary>
-              <div className="absolute right-0 top-full z-20 w-[16.5rem] rounded-2xl border border-line bg-ink-1 px-3 py-2.5 text-xs leading-relaxed text-text-3 shadow-[0_16px_40px_-24px_rgba(0,0,0,0.9)]">
+              <div className="absolute right-0 top-full z-20 w-[16.5rem] rounded-2xl border border-line bg-ink-1 px-3 py-2.5 text-xs leading-relaxed text-text-3 shadow-[0_16px_40px_-24px_var(--shadow)]">
                 <p className="font-medium text-text-2">{board.duel.startsOn} to {lastDay}</p>
                 {board.duel.plannedStartsOn !== board.duel.startsOn && (
                   <p className="mt-1.5">Start moved from {board.duel.plannedStartsOn} to {board.duel.startsOn}. Time before {board.duel.startsOn} does not count.</p>
@@ -246,7 +246,7 @@ export function DuelArena({
             const canStart = selectedDay === todayKey && board.you.status === "active" && personal;
             const liveActivity = board.activities.some((item) => item.id === activity.id);
             return (
-              <article key={activity.id} className="rounded-[18px] border border-line bg-[linear-gradient(180deg,rgba(142,123,255,0.05),transparent_42%),#0d0d13] px-3 py-3">
+              <article key={activity.id} className="rounded-[18px] border border-line bg-[linear-gradient(180deg,rgba(142,123,255,0.05),transparent_42%),var(--ink-1)] px-3 py-3">
                 <div className="flex items-baseline justify-between gap-2">
                   <h4 className="text-sm font-semibold text-text-1">{activity.name}</h4>
                   <p className="text-xs text-text-3">{activity.targetMinutes} min / day</p>
@@ -293,7 +293,7 @@ export function DuelArena({
                 <span className="block text-[0.65rem] font-semibold">{index + 1}</span>
                 <span className="mt-0.5 flex justify-center gap-0.5" aria-hidden>
                   <i className={`size-1.5 rounded-full ${phaseDot(youMark)}`} />
-                  <i className={`size-1.5 rounded-full ${friend ? phaseDot(friendMark) : "bg-white/10"}`} />
+                  <i className={`size-1.5 rounded-full ${friend ? phaseDot(friendMark) : "bg-[var(--track)]"}`} />
                 </span>
                 <span className="sr-only">{day.dayKey}. You {day.points} points. {friend ? `Friend ${friend.points} points.` : "Friend has not joined."}</span>
               </button>
@@ -438,7 +438,7 @@ export function DuelArena({
                     <li key={item.id}>
                       <button
                         type="button"
-                        className="min-h-11 w-full rounded-xl px-2 text-left text-sm text-text-1 hover:bg-white/5"
+                        className="min-h-11 w-full rounded-xl px-2 text-left text-sm text-text-1 hover:bg-[var(--wash-strong)]"
                         onClick={() => {
                           connect(activity.id, item.id);
                           setConnectId(null);
@@ -494,7 +494,7 @@ function BattleBar({
         <span className="truncate">{label}</span>
         <span>{status}</span>
       </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/10" role="meter" aria-valuenow={Math.min(minutes, target)} aria-valuemin={0} aria-valuemax={target} aria-label={`${label} ${minutes} of ${target} minutes`}>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--track)]" role="meter" aria-valuenow={Math.min(minutes, target)} aria-valuemin={0} aria-valuemax={target} aria-label={`${label} ${minutes} of ${target} minutes`}>
         <div className={`h-full rounded-full motion-reduce:transition-none ${met ? "bg-mint" : tone === "volt" ? "bg-volt" : "bg-ice"} transition-[width] duration-300`} style={{ width: `${width}%` }} />
       </div>
       <p className="mt-1 text-[0.65rem] text-text-3">{minutes}/{target} min</p>
@@ -505,8 +505,8 @@ function BattleBar({
 function phaseTile(phase: DayPhase): string {
   if (phase === "current") return "bg-ice/10 text-text-1";
   if (phase === "completed") return "bg-volt/20 text-text-1";
-  if (phase === "partial") return "bg-white/10 text-text-2";
-  if (phase === "missed") return "bg-white/5 text-text-3";
+  if (phase === "partial") return "bg-[var(--track)] text-text-2";
+  if (phase === "missed") return "bg-[var(--wash-strong)] text-text-3";
   return "bg-transparent text-text-3";
 }
 
@@ -514,6 +514,6 @@ function phaseDot(phase: DayPhase): string {
   if (phase === "completed") return "bg-mint";
   if (phase === "partial") return "bg-volt";
   if (phase === "current") return "bg-ice";
-  if (phase === "missed") return "bg-white/25";
-  return "bg-white/15";
+  if (phase === "missed") return "bg-[var(--handle)]";
+  return "bg-[var(--track)]";
 }
