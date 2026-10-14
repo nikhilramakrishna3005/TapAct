@@ -7,8 +7,10 @@ import {
   claimBatch,
   classifyPushStatus,
   defaultPushEvents,
+  deliveryLeaseMatches,
   isClaimable,
   nextPushDelayMs,
+  PUSH_BATCH_LIMIT,
   pushPayload,
   runPushDispatch,
   safeDuelPushUrl,
@@ -19,6 +21,7 @@ import {
   type ClaimedPushDelivery,
   type DeliveryRow,
 } from "./delivery";
+import { releasePushSubscription } from "./release";
 import { describePushAvailability, eventPreferencePatch, permissionHelp } from "./support";
 
 const duelId = "44444444-4444-4444-8444-444444444444";
@@ -187,27 +190,92 @@ describe("push delivery workers", () => {
 
   it("marks a send only after the push status is known and drops invalid subscriptions", async () => {
     const items: ClaimedPushDelivery[] = [
-      { id: "1", notificationId: "n1", title: "Invite accepted", body: "Alex accepted.", duelId, endpoint, p256dh, authKey: auth },
-      { id: "2", notificationId: "n2", title: "Duel finished", body: "Results are ready.", duelId, endpoint, p256dh, authKey: auth },
-      { id: "3", notificationId: "n3", title: "Opponent left", body: "Alex left.", duelId, endpoint, p256dh, authKey: auth },
+      { id: "1", claimToken: "lease-1", notificationId: "n1", title: "Invite accepted", body: "Alex accepted.", duelId, endpoint, p256dh, authKey: auth },
+      { id: "2", claimToken: "lease-2", notificationId: "n2", title: "Duel finished", body: "Results are ready.", duelId, endpoint, p256dh, authKey: auth },
+      { id: "3", claimToken: "lease-3", notificationId: "n3", title: "Opponent left", body: "Alex left.", duelId, endpoint, p256dh, authKey: auth },
     ];
-    const finished: { id: string; outcome: string }[] = [];
+    const finished: { id: string; claimToken: string; outcome: string }[] = [];
     const summary = await runPushDispatch({
       reconcile: async () => undefined,
       claim: async () => items,
+      prepare: async () => true,
       send: async (item) => ({ status: item.id === "1" ? 201 : item.id === "2" ? 410 : 503 }),
-      finish: async (id, outcome) => {
-        finished.push({ id, outcome });
+      finish: async (id, claimToken, outcome) => {
+        finished.push({ id, claimToken, outcome });
       },
     });
-    expect(summary).toEqual({ sent: 1, retried: 1, dropped: 1, failed: 0 });
+    expect(summary).toEqual({ sent: 1, retried: 1, dropped: 1, failed: 0, skipped: 0 });
     expect(finished).toEqual([
-      { id: "1", outcome: "sent" },
-      { id: "2", outcome: "invalid" },
-      { id: "3", outcome: "retry" },
+      { id: "1", claimToken: "lease-1", outcome: "sent" },
+      { id: "2", claimToken: "lease-2", outcome: "invalid" },
+      { id: "3", claimToken: "lease-3", outcome: "retry" },
     ]);
     expect(classifyPushStatus(404)).toBe("invalid");
     expect(classifyPushStatus(400)).toBe("dead");
+  });
+
+  it("does not send a claim that no longer matches the recipient", async () => {
+    const sent: string[] = [];
+    const summary = await runPushDispatch({
+      reconcile: async () => undefined,
+      claim: async () => [
+        { id: "old", claimToken: "stale", notificationId: "n1", title: "Invite accepted", body: "Alex accepted.", duelId, endpoint, p256dh, authKey: auth },
+        { id: "live", claimToken: "fresh", notificationId: "n2", title: "Duel finished", body: "Results are ready.", duelId, endpoint, p256dh, authKey: auth },
+      ],
+      prepare: async (id) => id === "live",
+      send: async (item) => {
+        sent.push(item.id);
+        return { status: 201 };
+      },
+      finish: async () => undefined,
+    });
+    expect(sent).toEqual(["live"]);
+    expect(summary).toEqual({ sent: 1, retried: 0, dropped: 0, failed: 0, skipped: 1 });
+  });
+
+  it("refuses a stale lease after the subscription changes accounts", () => {
+    expect(deliveryLeaseMatches({
+      status: "sending",
+      claimToken: "fresh",
+      presentedToken: "stale",
+      recipientId: "user-a",
+      subscriptionUserId: "user-a",
+      subscriptionDisabled: false,
+    })).toBe(false);
+    expect(deliveryLeaseMatches({
+      status: "sending",
+      claimToken: "fresh",
+      presentedToken: "fresh",
+      recipientId: "user-a",
+      subscriptionUserId: "user-b",
+      subscriptionDisabled: false,
+    })).toBe(false);
+    expect(deliveryLeaseMatches({
+      status: "cancelled",
+      claimToken: "fresh",
+      presentedToken: "fresh",
+      recipientId: "user-b",
+      subscriptionUserId: "user-b",
+      subscriptionDisabled: false,
+    })).toBe(false);
+    expect(deliveryLeaseMatches({
+      status: "sending",
+      claimToken: "fresh",
+      presentedToken: "fresh",
+      recipientId: "user-b",
+      subscriptionUserId: "user-b",
+      subscriptionDisabled: false,
+    })).toBe(true);
+  });
+
+  it("keeps two concurrent claimers from taking the same row", () => {
+    const rows = [row({ id: "a" }), row({ id: "b" }), row({ id: "c" })];
+    const first = claimBatch(rows, now, PUSH_BATCH_LIMIT);
+    const second = claimBatch(first.rest, now, PUSH_BATCH_LIMIT);
+    const ids = [...first.claimed, ...second.claimed].map((item) => item.id);
+    expect(ids).toEqual(["a", "b", "c"]);
+    expect(new Set(ids).size).toBe(3);
+    expect(PUSH_BATCH_LIMIT).toBeLessThanOrEqual(4);
   });
 
   it("authorizes only a matching scheduler secret", () => {
@@ -236,6 +304,18 @@ describe("push migration and service worker", () => {
     expect(sql).toContain("perform public.tapact_cancel_open_push_deliveries(existing.id)");
     expect(sql).toContain("on conflict (notification_id, subscription_id) do nothing");
     expect(sql).toContain("for update of d skip locked");
+    expect(sql).toContain("n.recipient_id = s.user_id");
+    expect(sql).toContain("claim_token = extensions.gen_random_uuid()");
+    expect(sql).toContain("row.claim_token is distinct from p_claim_token");
+    expect(sql).toContain("owner is distinct from recipient");
+    expect(sql).toContain("set status = 'cancelled', claim_token = null");
+    expect(sql).toContain("where id = row.subscription_id and user_id = recipient");
+    expect(sql).toContain("least(greatest(coalesce(p_batch, 4), 1), 4)");
+    expect(sql).toContain("grant execute on function public.tapact_prepare_push_send(uuid, uuid) to service_role");
+    expect(sql).toContain("revoke all on function public.tapact_prepare_push_send(uuid, uuid) from public, anon, authenticated");
+    expect(sql).toContain("grant execute on function public.tapact_finish_push_delivery(uuid, uuid, text, text) to service_role");
+    expect(sql).not.toContain("delete from public.tapact_notifications");
+    expect(sql).not.toContain("grant execute on function public.tapact_prepare_push_send(uuid, uuid) to authenticated");
     expect(sql).toContain("p.push_enabled");
     expect(sql).toContain("public.tapact_push_event_allowed(p, n.event_type)");
     expect(sql).toContain("status = 'sent'");
@@ -268,5 +348,68 @@ describe("push migration and service worker", () => {
     const signOut = authProvider.slice(authProvider.indexOf("const signOut"));
     expect(signOut.indexOf("releaseDevicePushSubscription")).toBeGreaterThan(-1);
     expect(signOut.indexOf("releaseDevicePushSubscription")).toBeLessThan(signOut.indexOf("supabase.auth.signOut"));
+  });
+});
+
+describe("push sign-out", () => {
+  const subscription = () => ({
+    endpoint: "https://fcm.googleapis.com/fcm/send/device-1",
+    unsubscribe: async () => true,
+  });
+
+  it("treats an RPC error as a failed unregister and still unsubscribes the browser", async () => {
+    let unsubscribed = 0;
+    const result = await releasePushSubscription({
+      lookup: async () => ({
+        endpoint: subscription().endpoint,
+        unsubscribe: async () => {
+          unsubscribed += 1;
+          return true;
+        },
+      }),
+      unregister: async () => ({ error: { message: "permission denied" } }),
+    });
+    expect(result).toEqual({ hadSubscription: true, serverReleased: false, browserReleased: true });
+    expect(unsubscribed).toBe(1);
+  });
+
+  it("still unsubscribes after the unregister request times out", async () => {
+    let unsubscribed = 0;
+    const result = await releasePushSubscription({
+      timeoutMs: 20,
+      lookup: async () => ({
+        endpoint: subscription().endpoint,
+        unsubscribe: async () => {
+          unsubscribed += 1;
+          return true;
+        },
+      }),
+      unregister: () => new Promise((resolve) => {
+        setTimeout(() => resolve({ error: null }), 200);
+      }),
+    });
+    expect(result.serverReleased).toBe(false);
+    expect(result.browserReleased).toBe(true);
+    expect(unsubscribed).toBe(1);
+  });
+
+  it("survives a revoked permission and a repeated unsubscribe failure", async () => {
+    const result = await releasePushSubscription({
+      lookup: async () => ({
+        endpoint: subscription().endpoint,
+        unsubscribe: async () => {
+          throw new Error("permission revoked");
+        },
+      }),
+      unregister: async () => ({ error: null }),
+    });
+    expect(result).toEqual({ hadSubscription: true, serverReleased: true, browserReleased: false });
+    const again = await releasePushSubscription({
+      lookup: async () => {
+        throw new Error("no service worker");
+      },
+      unregister: async () => ({ error: null }),
+    });
+    expect(again).toEqual({ hadSubscription: false, serverReleased: false, browserReleased: false });
   });
 });

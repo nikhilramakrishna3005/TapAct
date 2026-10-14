@@ -19,11 +19,12 @@ function asClaimed(raw: unknown): ClaimedPushDelivery[] {
   return raw.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
     const row = item as Record<string, unknown>;
-    if (typeof row.id !== "string" || typeof row.endpoint !== "string" || typeof row.duelId !== "string") return [];
+    if (typeof row.id !== "string" || typeof row.claimToken !== "string" || typeof row.endpoint !== "string" || typeof row.duelId !== "string") return [];
     if (typeof row.title !== "string" || typeof row.body !== "string") return [];
     if (typeof row.p256dh !== "string" || typeof row.authKey !== "string" || typeof row.notificationId !== "string") return [];
     return [{
       id: row.id,
+      claimToken: row.claimToken,
       notificationId: row.notificationId,
       title: row.title,
       body: row.body,
@@ -67,6 +68,14 @@ async function dispatch(request: Request): Promise<Response> {
         if (error) throw error;
         return asClaimed(data);
       },
+      prepare: async (id, claimToken) => {
+        const { data, error } = await admin.rpc("tapact_prepare_push_send", {
+          p_id: id,
+          p_claim_token: claimToken,
+        });
+        if (error) throw error;
+        return data === true;
+      },
       send: async (item) => {
         try {
           const result = await webpush.sendNotification(
@@ -87,9 +96,10 @@ async function dispatch(request: Request): Promise<Response> {
           return { status: Number.isFinite(status) ? status : 0 };
         }
       },
-      finish: async (id, outcome: PushOutcome) => {
+      finish: async (id, claimToken, outcome: PushOutcome) => {
         const { error } = await admin.rpc("tapact_finish_push_delivery", {
           p_id: id,
+          p_claim_token: claimToken,
           p_outcome: outcome,
           p_error: outcome === "sent" ? null : safeDeliveryError(outcome),
         });

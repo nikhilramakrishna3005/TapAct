@@ -128,9 +128,14 @@ export function PushSettings({ platform, installed }: { platform: PushPlatform; 
     setBusy(true);
     setError(null);
     try {
-      await releaseDevicePushSubscription();
-      setRegistered(false);
+      const released = await releaseDevicePushSubscription();
+      if (!released.hadSubscription || released.browserReleased || released.serverReleased) {
+        setRegistered(false);
+      }
       setPermission(readPermission());
+      if (released.hadSubscription && !released.serverReleased) {
+        setError("This device could not be removed from the account. It stops once TapAct can reach the server, or when the next account enables notifications here.");
+      }
     } catch {
       setError("Couldn't remove this device. Try again.");
     } finally {

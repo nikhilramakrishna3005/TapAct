@@ -19,10 +19,17 @@
 -- the service-role functions.
 --
 -- A delivery is marked sent only after the push service accepts it. Claiming
--- uses SKIP LOCKED so two workers do not send the same pending row. Web Push
--- is still at-least-once: a crash after the push service accepts a message and
--- before the worker records it can produce another attempt. The device is not
--- guaranteed to display every accepted message exactly once.
+-- uses SKIP LOCKED so two workers do not send the same pending row. Each claim
+-- gets a new claim_token. Finish and the pre-send check ignore any other token,
+-- so a stale worker cannot complete a delivery that was reclaimed or moved to
+-- another account. Sending also requires the subscription owner to still be
+-- the notification recipient.
+--
+-- Web Push is still at-least-once: a crash after the push service accepts a
+-- message and before the worker records it can produce another attempt. A
+-- message already accepted cannot be recalled if the account changes during
+-- that send. The device is not guaranteed to display every accepted message
+-- exactly once. The daily worker is a sweep, not a timely-delivery guarantee.
 
 begin;
 
@@ -71,6 +78,7 @@ create table if not exists public.tapact_push_deliveries (
   next_attempt_at timestamptz not null default now(),
   claimed_at timestamptz,
   claimed_by text,
+  claim_token uuid,
   last_error text,
   sent_at timestamptz,
   created_at timestamptz not null default now(),
@@ -147,7 +155,7 @@ security definer
 set search_path = ''
 as $$
   update public.tapact_push_deliveries
-  set status = 'cancelled'
+  set status = 'cancelled', claim_token = null
   where subscription_id = p_subscription
     and status in ('pending', 'failed', 'sending');
 $$;
@@ -452,7 +460,7 @@ end;
 $$;
 
 create or replace function public.tapact_claim_push_deliveries(
-  p_batch integer default 10,
+  p_batch integer default 4,
   p_worker text default 'worker'
 )
 returns jsonb
@@ -461,15 +469,15 @@ security definer
 set search_path = ''
 as $$
 declare
-  take integer := least(greatest(coalesce(p_batch, 10), 1), 25);
+  take integer := least(greatest(coalesce(p_batch, 4), 1), 4);
   result jsonb := '[]'::jsonb;
 begin
   with due as (
     select d.id
     from public.tapact_push_deliveries d
     join public.tapact_push_subscriptions s on s.id = d.subscription_id and s.disabled_at is null
-    join public.tapact_notifications n on n.id = d.notification_id
-    join public.tapact_push_preferences p on p.user_id = s.user_id and p.push_enabled
+    join public.tapact_notifications n on n.id = d.notification_id and n.recipient_id = s.user_id
+    join public.tapact_push_preferences p on p.user_id = n.recipient_id and p.push_enabled
       and public.tapact_push_event_allowed(p, n.event_type)
     where (
       d.status in ('pending', 'failed') and d.next_attempt_at <= now() and d.attempts < 5
@@ -484,13 +492,15 @@ begin
     update public.tapact_push_deliveries d
     set status = 'sending',
         claimed_at = clock_timestamp(),
-        claimed_by = left(coalesce(p_worker, 'worker'), 80)
+        claimed_by = left(coalesce(p_worker, 'worker'), 80),
+        claim_token = extensions.gen_random_uuid()
     from due
     where d.id = due.id
-    returning d.id, d.notification_id, d.subscription_id
+    returning d.id, d.notification_id, d.subscription_id, d.claim_token
   )
   select coalesce(jsonb_agg(jsonb_build_object(
     'id', u.id,
+    'claimToken', u.claim_token,
     'notificationId', n.id,
     'title', n.title,
     'body', n.body,
@@ -502,14 +512,57 @@ begin
   into result
   from updated u
   join public.tapact_notifications n on n.id = u.notification_id
-  join public.tapact_push_subscriptions s on s.id = u.subscription_id;
+  join public.tapact_push_subscriptions s on s.id = u.subscription_id and s.user_id = n.recipient_id and s.disabled_at is null;
 
   return coalesce(result, '[]'::jsonb);
 end;
 $$;
 
+-- Last check before the worker contacts the push service. A mismatched account,
+-- a disabled subscription, or a replaced claim cancels this row and returns false.
+create or replace function public.tapact_prepare_push_send(
+  p_id uuid,
+  p_claim_token uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  row public.tapact_push_deliveries%rowtype;
+  recipient uuid;
+  owner uuid;
+  event_name text;
+  prefs public.tapact_push_preferences%rowtype;
+begin
+  select * into row from public.tapact_push_deliveries where id = p_id for update;
+  if row.id is null or row.status <> 'sending' or row.claim_token is distinct from p_claim_token then
+    return false;
+  end if;
+
+  select n.recipient_id, s.user_id, n.event_type
+  into recipient, owner, event_name
+  from public.tapact_notifications n
+  join public.tapact_push_subscriptions s on s.id = row.subscription_id and s.disabled_at is null
+  where n.id = row.notification_id;
+
+  select * into prefs from public.tapact_push_preferences where user_id = recipient;
+  if recipient is null or owner is distinct from recipient or prefs.user_id is null
+     or coalesce(public.tapact_push_event_allowed(prefs, event_name), false) = false then
+    update public.tapact_push_deliveries
+    set status = 'cancelled', claim_token = null
+    where id = row.id and status = 'sending' and claim_token = p_claim_token;
+    return false;
+  end if;
+
+  return true;
+end;
+$$;
+
 create or replace function public.tapact_finish_push_delivery(
   p_id uuid,
+  p_claim_token uuid,
   p_outcome text,
   p_error text default null
 )
@@ -520,27 +573,45 @@ set search_path = ''
 as $$
 declare
   row public.tapact_push_deliveries%rowtype;
+  recipient uuid;
+  owner uuid;
   next_attempts integer;
 begin
   select * into row from public.tapact_push_deliveries where id = p_id for update;
-  if row.id is null or row.status <> 'sending' then
+  if row.id is null or row.status <> 'sending' or row.claim_token is distinct from p_claim_token then
+    return;
+  end if;
+
+  select n.recipient_id, s.user_id
+  into recipient, owner
+  from public.tapact_notifications n
+  join public.tapact_push_subscriptions s on s.id = row.subscription_id
+  where n.id = row.notification_id;
+
+  if recipient is null or owner is distinct from recipient then
+    update public.tapact_push_deliveries
+    set status = 'cancelled', claim_token = null
+    where id = row.id and status = 'sending' and claim_token = p_claim_token;
     return;
   end if;
 
   if p_outcome = 'sent' then
     update public.tapact_push_deliveries
     set status = 'sent', sent_at = now(), last_error = null
-    where id = row.id;
+    where id = row.id and status = 'sending' and claim_token = p_claim_token;
     return;
   end if;
 
   if p_outcome = 'invalid' then
     update public.tapact_push_deliveries
-    set status = 'dead', attempts = attempts + 1, last_error = left(coalesce(p_error, 'Subscription is no longer valid.'), 180)
-    where id = row.id;
+    set status = 'dead', attempts = attempts + 1, last_error = left(coalesce(p_error, 'Subscription is no longer valid.'), 180), claim_token = null
+    where id = row.id and status = 'sending' and claim_token = p_claim_token;
+    if not found then
+      return;
+    end if;
     update public.tapact_push_subscriptions
     set disabled_at = coalesce(disabled_at, now()), updated_at = now()
-    where id = row.subscription_id;
+    where id = row.subscription_id and user_id = recipient;
     perform public.tapact_cancel_open_push_deliveries(row.subscription_id);
     return;
   end if;
@@ -548,8 +619,8 @@ begin
   next_attempts := row.attempts + 1;
   if p_outcome = 'dead' or next_attempts >= 5 then
     update public.tapact_push_deliveries
-    set status = 'dead', attempts = next_attempts, last_error = left(coalesce(p_error, 'This notice could not be delivered.'), 180)
-    where id = row.id;
+    set status = 'dead', attempts = next_attempts, last_error = left(coalesce(p_error, 'This notice could not be delivered.'), 180), claim_token = null
+    where id = row.id and status = 'sending' and claim_token = p_claim_token;
     return;
   end if;
 
@@ -557,8 +628,9 @@ begin
   set status = 'failed',
       attempts = next_attempts,
       next_attempt_at = now() + (interval '1 minute' * power(2, next_attempts - 1)),
-      last_error = left(coalesce(p_error, 'The push service did not accept the notice yet.'), 180)
-  where id = row.id;
+      last_error = left(coalesce(p_error, 'The push service did not accept the notice yet.'), 180),
+      claim_token = null
+  where id = row.id and status = 'sending' and claim_token = p_claim_token;
 end;
 $$;
 
@@ -573,7 +645,8 @@ revoke all on function public.tapact_cancel_open_push_deliveries(uuid) from publ
 revoke all on function public.tapact_enqueue_push_delivery() from public, anon, authenticated;
 revoke all on function public.tapact_reconcile_due_duel_notifications() from public, anon, authenticated;
 revoke all on function public.tapact_claim_push_deliveries(integer, text) from public, anon, authenticated;
-revoke all on function public.tapact_finish_push_delivery(uuid, text, text) from public, anon, authenticated;
+revoke all on function public.tapact_prepare_push_send(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.tapact_finish_push_delivery(uuid, uuid, text, text) from public, anon, authenticated;
 
 revoke all on function public.tapact_get_push_settings(text) from public, anon;
 revoke all on function public.tapact_set_push_preferences(jsonb) from public, anon;
@@ -587,6 +660,7 @@ grant execute on function public.tapact_unregister_push_subscription(text) to au
 
 grant execute on function public.tapact_reconcile_due_duel_notifications() to service_role;
 grant execute on function public.tapact_claim_push_deliveries(integer, text) to service_role;
-grant execute on function public.tapact_finish_push_delivery(uuid, text, text) to service_role;
+grant execute on function public.tapact_prepare_push_send(uuid, uuid) to service_role;
+grant execute on function public.tapact_finish_push_delivery(uuid, uuid, text, text) to service_role;
 
 commit;

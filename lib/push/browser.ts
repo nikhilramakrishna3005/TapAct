@@ -1,5 +1,6 @@
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { validatePushSubscription } from "./delivery";
+import { releasePushSubscription, type PushReleaseResult } from "./release";
 
 export function publicVapidKey(): string {
   return process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.trim() ?? "";
@@ -60,24 +61,34 @@ export async function pauseDevicePush(pushEnabled: boolean): Promise<void> {
   if (error) throw error;
 }
 
-export async function releaseDevicePushSubscription(): Promise<void> {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
-  const registration = await navigator.serviceWorker.getRegistration();
-  const subscription = await registration?.pushManager.getSubscription();
-  const endpoint = subscription?.endpoint;
-  if (endpoint) {
-    try {
-      const client = getSupabaseBrowserClient();
-      if (client) {
-        await client.rpc("tapact_unregister_push_subscription", { p_endpoint: endpoint });
-      }
-    } catch {
-      // Sign-out still proceeds. The next account that registers this endpoint takes it over.
-    }
+/**
+ * Best-effort removal for sign-out and "disable on this device".
+ * Never throws, and each network or browser step gives up after a short deadline.
+ * See releasePushSubscription for the offline limitation.
+ */
+export async function releaseDevicePushSubscription(): Promise<PushReleaseResult> {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+    return { hadSubscription: false, serverReleased: false, browserReleased: false };
   }
   try {
-    await subscription?.unsubscribe();
+    return await releasePushSubscription({
+      lookup: async () => {
+        const registration = await navigator.serviceWorker.getRegistration();
+        const subscription = await registration?.pushManager.getSubscription();
+        if (!subscription) return null;
+        return {
+          endpoint: subscription.endpoint,
+          unsubscribe: () => subscription.unsubscribe(),
+        };
+      },
+      unregister: async (endpoint) => {
+        const client = getSupabaseBrowserClient();
+        if (!client) return { error: { message: "Sign in to change notification settings." } };
+        const { error } = await client.rpc("tapact_unregister_push_subscription", { p_endpoint: endpoint });
+        return { error };
+      },
+    });
   } catch {
-    // The browser subscription can outlive the account row. Registration replaces it.
+    return { hadSubscription: false, serverReleased: false, browserReleased: false };
   }
 }

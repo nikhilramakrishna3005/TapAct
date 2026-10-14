@@ -1,7 +1,12 @@
 import { NOTIFICATION_EVENTS, type NotificationEventType } from "../duels/notifications";
 
 export const MAX_PUSH_ATTEMPTS = 5;
-export const PUSH_BATCH_LIMIT = 10;
+/**
+ * Each claimed row needs a prepare call, a push send, and a finish call.
+ * Four sequential rows stay inside the 10-second Hobby function limit.
+ * The daily cron is a sweep, not a promise of timely delivery.
+ */
+export const PUSH_BATCH_LIMIT = 4;
 export const STALE_CLAIM_MS = 10 * 60 * 1000;
 
 export const PUSH_EVENT_LABELS: Record<NotificationEventType, string> = {
@@ -33,6 +38,7 @@ export type PushPreferenceState = {
 
 export type ClaimedPushDelivery = {
   id: string;
+  claimToken: string;
   notificationId: string;
   title: string;
   body: string;
@@ -41,6 +47,30 @@ export type ClaimedPushDelivery = {
   p256dh: string;
   authKey: string;
 };
+
+export type PushDispatchSummary = {
+  sent: number;
+  retried: number;
+  dropped: number;
+  failed: number;
+  skipped: number;
+};
+
+/** A worker may send or finish only the lease it claimed, for the notification's recipient. */
+export function deliveryLeaseMatches(input: {
+  status: string;
+  claimToken: string | null;
+  presentedToken: string;
+  recipientId: string;
+  subscriptionUserId: string;
+  subscriptionDisabled: boolean;
+}): boolean {
+  return input.status === "sending"
+    && input.claimToken !== null
+    && input.claimToken === input.presentedToken
+    && input.recipientId === input.subscriptionUserId
+    && !input.subscriptionDisabled;
+}
 
 export type DeliveryRow = {
   id: string;
@@ -156,20 +186,37 @@ export function claimBatch(rows: DeliveryRow[], nowMs: number, limit = PUSH_BATC
 export async function runPushDispatch(deps: {
   reconcile: () => Promise<void>;
   claim: () => Promise<ClaimedPushDelivery[]>;
+  prepare: (id: string, claimToken: string) => Promise<boolean>;
   send: (item: ClaimedPushDelivery) => Promise<{ status: number }>;
-  finish: (id: string, outcome: PushOutcome) => Promise<void>;
-}): Promise<{ sent: number; retried: number; dropped: number; failed: number }> {
+  finish: (id: string, claimToken: string, outcome: PushOutcome) => Promise<void>;
+}): Promise<PushDispatchSummary> {
   await deps.reconcile();
   const claimed = await deps.claim();
-  const summary = { sent: 0, retried: 0, dropped: 0, failed: 0 };
+  const summary: PushDispatchSummary = { sent: 0, retried: 0, dropped: 0, failed: 0, skipped: 0 };
   for (const item of claimed) {
+    let allowed = false;
+    try {
+      allowed = await deps.prepare(item.id, item.claimToken);
+    } catch {
+      summary.failed += 1;
+      continue;
+    }
+    if (!allowed) {
+      summary.skipped += 1;
+      continue;
+    }
     let outcome: PushOutcome = "retry";
     try {
       outcome = classifyPushStatus((await deps.send(item)).status);
     } catch {
       outcome = "retry";
     }
-    await deps.finish(item.id, outcome);
+    try {
+      await deps.finish(item.id, item.claimToken, outcome);
+    } catch {
+      summary.failed += 1;
+      continue;
+    }
     if (outcome === "sent") summary.sent += 1;
     else if (outcome === "retry") summary.retried += 1;
     else if (outcome === "invalid") summary.dropped += 1;
