@@ -20,6 +20,7 @@ import {
 import { DURATION, EASE_OUT } from "@/lib/motion";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getSiteUrl } from "@/lib/supabase/config";
+import { LegalLinks } from "../legal/LegalLinks";
 import { OrbitMark } from "../Orbit";
 import { Segmented } from "../ui";
 import { AuthOrbit, type OrbitPose } from "./AuthOrbit";
@@ -555,8 +556,8 @@ export function AuthScreen({
                   </SubmitButton>
                   <p className="flex items-start gap-2 text-[0.72rem] leading-relaxed text-text-3">
                     <CloudOff className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-                    Creating an account doesn&apos;t back up your activities yet. Your history stays on this device
-                    until cloud sync arrives.
+                    Creating an account does not upload this device&apos;s history by itself. Cloud sync starts only
+                    after you choose what to do with the data already on this device.
                   </p>
                 </form>
               )}
@@ -672,6 +673,7 @@ export function AuthScreen({
             </p>
           </div>
         )}
+        <LegalLinks className="mt-4 justify-center" />
       </div>
     </div>
   );
