@@ -12,10 +12,16 @@ import {
   getWeekStartKey,
   sumRange,
 } from "@/lib/insights";
-import { DURATION, EASE_OUT } from "@/lib/motion";
+import {
+  INSIGHTS_BAR_DURATION,
+  INSIGHTS_BAR_STAGGER,
+  INSIGHTS_CHART_EASE,
+  insightsTransition,
+} from "@/lib/insightsMotion";
 import type { TrackerState } from "@/lib/tracker";
 import { NotificationScreenHeader as ScreenHeader } from "./duels/NotificationInbox";
 import { LifeBalanceSection } from "./LifeBalance";
+import { useMotionPrefs } from "./MotionPrefs";
 import {
   ActivityBreakdownRow,
   EmptyState,
@@ -37,6 +43,7 @@ const PERIOD_LABELS: Record<Period, string> = {
 const CHART_HEIGHT = 148;
 
 export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; todayKey: string }) {
+  const { reduced } = useMotionPrefs();
   const [period, setPeriod] = useState<Period>("week");
   const [selectedBarKey, setSelectedBarKey] = useState<string | null>(null);
   const records = tracker.dailyRecords;
@@ -147,11 +154,17 @@ export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; tod
                     className="relative flex h-full min-w-0 flex-1 flex-col justify-end rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi"
                   >
                     <motion.div
-                      className="flex w-full flex-col-reverse overflow-hidden rounded-[8px] bg-[var(--track-soft)]"
-                      initial={{ height: 0 }}
-                      animate={{ height: Math.max(height, bar.totalMs > 0 ? 6 : 4) }}
-                      transition={{ duration: DURATION.slow, ease: EASE_OUT, delay: index * 0.035 }}
+                      className="flex w-full origin-bottom flex-col-reverse overflow-hidden rounded-[8px] bg-[var(--track-soft)]"
+                      initial={reduced ? false : { scaleY: 0 }}
+                      animate={{ scaleY: 1 }}
+                      transition={insightsTransition(
+                        reduced,
+                        INSIGHTS_BAR_DURATION,
+                        INSIGHTS_CHART_EASE,
+                        index * INSIGHTS_BAR_STAGGER,
+                      )}
                       style={{
+                        height: Math.max(height, bar.totalMs > 0 ? 6 : 4),
                         opacity: selectedBarKey && !isSelected ? 0.35 : 1,
                         boxShadow: isToday ? "0 0 0 1.5px var(--ice)" : undefined,
                         transition: "opacity 200ms",

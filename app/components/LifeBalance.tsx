@@ -27,6 +27,13 @@ import {
   LIFE_AREAS,
   type LifeAreaId,
 } from "@/lib/lifeBalance";
+import {
+  INSIGHTS_CHART_EASE,
+  INSIGHTS_RING_DURATION,
+  INSIGHTS_RING_EASE,
+  INSIGHTS_SHARE_DURATION,
+  insightsTransition,
+} from "@/lib/insightsMotion";
 import { DURATION, EASE_OUT } from "@/lib/motion";
 import type { LifeCategoryId, TrackerState } from "@/lib/tracker";
 import { useMotionPrefs } from "./MotionPrefs";
@@ -156,7 +163,7 @@ export function LifeBalanceSection({ tracker, todayKey }: { tracker: TrackerStat
             >
               <circle cx={c} cy={c} r={r} fill="none" stroke="var(--orbit-dim)" strokeWidth={RING_STROKE} />
               <circle cx={c} cy={c} r={r - RING_STROKE} fill="none" stroke="var(--orbit-dim)" strokeDasharray="2 5" />
-              {arcs.map(({ area, start, end }, index) => {
+              {arcs.map(({ area, start, end }) => {
                 const isSelected = selectedId === area.id;
                 const dimmed = selected !== null && !isSelected;
                 const full = arcs.length === 1;
@@ -181,7 +188,7 @@ export function LifeBalanceSection({ tracker, todayKey }: { tracker: TrackerStat
                     {...common}
                     initial={reduced ? false : { pathLength: 0 }}
                     animate={{ pathLength: 1 }}
-                    transition={{ duration: DURATION.slow * 2, ease: EASE_OUT }}
+                    transition={insightsTransition(reduced, INSIGHTS_RING_DURATION, INSIGHTS_RING_EASE)}
                   />
                 ) : (
                   <motion.path
@@ -190,7 +197,7 @@ export function LifeBalanceSection({ tracker, todayKey }: { tracker: TrackerStat
                     {...common}
                     initial={reduced ? false : { pathLength: 0 }}
                     animate={{ pathLength: 1 }}
-                    transition={{ duration: DURATION.slow * 1.6, ease: EASE_OUT, delay: index * 0.06 }}
+                    transition={insightsTransition(reduced, INSIGHTS_RING_DURATION, INSIGHTS_RING_EASE)}
                   />
                 );
               })}
@@ -279,8 +286,10 @@ function AreaRow({
   expanded: boolean;
   onToggle: () => void;
 }) {
+  const { reduced } = useMotionPrefs();
   const Icon = AREA_ICONS[area.id];
   const contributing = area.activities;
+  const shareWidth = `${area.share > 0 ? Math.max(area.share * 100, 2) : 0}%`;
   return (
     <li>
       <button
@@ -307,11 +316,12 @@ function AreaRow({
           </span>
           <span className="mt-1 block h-1 overflow-hidden rounded-full bg-[var(--track-soft)]">
             <motion.span
-              className="block h-full rounded-full"
-              style={{ background: area.color }}
-              initial={{ width: 0 }}
-              animate={{ width: `${area.share > 0 ? Math.max(area.share * 100, 2) : 0}%` }}
-              transition={{ duration: DURATION.slow, ease: EASE_OUT }}
+              key={period}
+              className="block h-full origin-left rounded-full"
+              style={{ background: area.color, width: shareWidth }}
+              initial={reduced ? false : { scaleX: 0 }}
+              animate={{ scaleX: 1 }}
+              transition={insightsTransition(reduced, INSIGHTS_SHARE_DURATION, INSIGHTS_CHART_EASE)}
             />
           </span>
           <span className="mt-1 block">
