@@ -9,6 +9,17 @@
 -- delete is a second, retryable step. This file does not perform that second step
 -- and does not grant it to the browser.
 --
+-- The eventual backend route (not implemented here):
+-- 1. Accept only the caller's Supabase user JWT. Never take a user id from the body.
+-- 2. Require the caller to type their account email. prepare compares it to auth.users.email.
+-- 3. Require a fresh sign-in first. prepare rejects last_sign_in_at older than 10 minutes.
+-- 4. After prepare returns status "prepared", call auth.admin.deleteUser for that same
+--    uid with the service role, only on the server.
+-- 5. If deleteUser fails, return an error. The identity still exists, so the user can
+--    sign in again, call prepare again (it is idempotent), and the route retries
+--    deleteUser. The deletion-request row blocks new personal writes until Auth is gone.
+-- 6. Previously delivered push notifications cannot be recalled and stay outside this guarantee.
+--
 -- Scoring math is unchanged. tapact_duel_member_score is not replaced. After a
 -- member is detached, the board reads the jsonb that function already returned.
 --
@@ -157,10 +168,13 @@ as $$
 declare
   target uuid;
 begin
-  target := case
-    when tg_table_name = 'tapact_notifications' then new.recipient_id
-    else new.user_id
-  end;
+  -- Separate statements. A SQL CASE reads every NEW field it mentions, so
+  -- notifications and the other tables cannot share one expression.
+  if tg_table_name = 'tapact_notifications' then
+    target := new.recipient_id;
+  else
+    target := new.user_id;
+  end if;
   if target is not null and exists (
     select 1
     from public.tapact_account_deletion_requests r
@@ -281,14 +295,27 @@ begin
 
   -- Keep user_id for this update so the departure trigger can still see the opponent.
   -- The new notice uses the anonymized name. A second update then detaches Auth.
-  update public.tapact_duel_members
+  -- Only an active duel becomes "left". Completed and cancelled rows keep their
+  -- status so Arena and recap do not describe a finished member as having quit.
+  update public.tapact_duel_members m
   set
     display_name = 'Former member',
-    status = 'left',
-    left_at = coalesce(left_at, now()),
+    status = case
+      when m.status = 'left' then 'left'
+      when d.status = 'active' then 'left'
+      else m.status
+    end,
+    left_at = case
+      when m.status = 'left' or d.status = 'active' then coalesce(m.left_at, now())
+      else m.left_at
+    end,
     share_live = false
-  where user_id = uid;
+  from public.tapact_duels d
+  where m.duel_id = d.id
+    and m.user_id = uid;
 
+  -- Known notice templates only. Other sentences, proposal JSON besides
+  -- trackerActivityId, and already-delivered push payloads are not rewritten.
   foreach v_name in array names
   loop
     if v_name is null or v_name = 'Former member' then
@@ -298,11 +325,18 @@ begin
     set body = left('Former member' || substr(n.body, char_length(v_name) + 1), 240)
     where n.duel_id = any(mine)
       and n.recipient_id <> uid
-      and left(n.body, char_length(v_name) + 1) = v_name || ' ';
+      and left(n.body, char_length(v_name) + 1) = v_name || ' '
+      and (
+        substr(n.body, char_length(v_name) + 2) like 'accepted your duel%'
+        or substr(n.body, char_length(v_name) + 2) like 'left "%'
+        or substr(n.body, char_length(v_name) + 2) like 'proposed a change%'
+        or substr(n.body, char_length(v_name) + 2) like 'approved your changes%'
+        or substr(n.body, char_length(v_name) + 2) like 'declined your changes%'
+      );
   end loop;
 
   update public.tapact_notifications n
-  set dedupe_key = replace(n.dedupe_key, uid::text, 'former')
+  set dedupe_key = left('former:' || n.id::text, 160)
   where n.duel_id = any(mine)
     and n.recipient_id <> uid
     and position(uid::text in n.dedupe_key) > 0;
@@ -449,7 +483,7 @@ begin
     'you', jsonb_build_object(
       'name', me.display_name, 'score', coalesce((you_score ->> 'points')::int, 0),
       'status', me.status, 'shareLive', me.share_live, 'muted', me.muted,
-      'creator', me.user_id = d.creator_id,
+      'creator', (me.user_id = d.creator_id) is true,
       'todayKey', (now() at time zone me.time_zone)::date,
       'timeZone', me.time_zone,
       'character', public.tapact_duel_public_character(uid),
@@ -478,5 +512,155 @@ $$;
 
 revoke all on function public.tapact_duel_board(uuid) from public, anon;
 grant execute on function public.tapact_duel_board(uuid) to authenticated;
+
+-- creator_id = uid is null after the creator is detached. Return a real boolean.
+create or replace function public.tapact_list_duels()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  uid uuid := auth.uid();
+begin
+  if uid is null then
+    return '[]'::jsonb;
+  end if;
+  return coalesce((
+    select jsonb_agg(item order by
+      case item ->> 'status'
+        when 'active' then 0
+        when 'pending' then 1
+        when 'completed' then 2
+        else 3
+      end,
+      item ->> 'startsOn' desc
+    )
+    from (
+      select jsonb_build_object(
+        'id', d.id,
+        'title', d.title,
+        'status', d.status,
+        'startsOn', d.starts_on,
+        'durationDays', d.duration_days,
+        'awaitingOpponent', d.status = 'pending',
+        'archived', m.hidden_at is not null,
+        'creator', (d.creator_id = uid) is true,
+        'memberStatus', m.status
+      ) as item
+      from public.tapact_duels d
+      join public.tapact_duel_members m on m.duel_id = d.id and m.user_id = uid
+    ) rows
+  ), '[]'::jsonb);
+end;
+$$;
+
+-- Completion still needs the detached member's saved time zone. user_id <> uid
+-- does not match a null user_id, so an active duel would never finish.
+create or replace function public.tapact_reconcile_duel_notifications()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  uid uuid := auth.uid();
+  duel_id uuid;
+  d public.tapact_duels%rowtype;
+  my_zone text;
+  friend_zone text;
+  later timestamptz;
+  member record;
+  rule record;
+  reader record;
+begin
+  if uid is null then
+    return;
+  end if;
+
+  for duel_id in
+    select d0.id
+    from public.tapact_duels d0
+    join public.tapact_duel_members mine
+      on mine.duel_id = d0.id and mine.user_id = uid
+    where d0.status = 'active'
+    order by d0.id
+  loop
+    select * into d from public.tapact_duels where id = duel_id for update;
+    if d.id is null or d.status is distinct from 'active' then
+      continue;
+    end if;
+
+    select m.time_zone into my_zone
+    from public.tapact_duel_members m
+    where m.duel_id = d.id and m.user_id = uid;
+
+    for member in
+      select m.user_id, m.time_zone
+      from public.tapact_duel_members m
+      where m.duel_id = d.id
+    loop
+      if member.user_id is not null
+         and (now() at time zone member.time_zone)::date >= d.starts_on then
+        perform public.tapact_emit_notification(
+          member.user_id,
+          'duel_started',
+          d.id,
+          null,
+          'Duel started',
+          '"' || d.title || '" has officially started.',
+          'duel_started:' || d.id::text
+        );
+      end if;
+    end loop;
+
+    for rule in
+      select p.id, p.effective_on
+      from public.tapact_duel_proposals p
+      where p.duel_id = d.id
+        and p.status = 'approved'
+        and p.effective_on is not null
+    loop
+      for reader in
+        select m.user_id, m.time_zone
+        from public.tapact_duel_members m
+        where m.duel_id = d.id
+          and m.user_id is not null
+      loop
+        if (now() at time zone reader.time_zone)::date >= rule.effective_on then
+          perform public.tapact_emit_notification(
+            reader.user_id,
+            'rules_effective',
+            d.id,
+            rule.id,
+            'Rules updated',
+            'New rules for "' || d.title || '" are in effect.',
+            'rules_effective:' || rule.id::text
+          );
+        end if;
+      end loop;
+    end loop;
+
+    select f.time_zone into friend_zone
+    from public.tapact_duel_members f
+    where f.duel_id = d.id
+      and f.user_id is distinct from uid
+    limit 1;
+
+    if friend_zone is not null and my_zone is not null then
+      later := greatest(
+        (d.starts_on + d.duration_days)::timestamp at time zone my_zone,
+        (d.starts_on + d.duration_days)::timestamp at time zone friend_zone
+      );
+      if now() >= later then
+        update public.tapact_duels
+        set status = 'completed', updated_at = now()
+        where id = d.id and status = 'active';
+      end if;
+    end if;
+  end loop;
+end;
+$$;
 
 commit;

@@ -26,6 +26,8 @@ describe("account deletion migration", () => {
   it("detaches a member instead of transferring creator rights", () => {
     expect(migration).toContain("foreign key (user_id) references auth.users (id) on delete set null");
     expect(migration).toContain("display_name = 'Former member'");
+    expect(migration).toContain("when d.status = 'active' then 'left'");
+    expect(migration).toContain("else m.status");
     expect(migration).toContain("set user_id = null");
     expect(migration).toContain("frozen_score = public.tapact_duel_member_score(m.duel_id, m.user_id)");
     expect(migration).not.toMatch(/creator_id\s*=\s*m\.user_id/);
@@ -39,6 +41,9 @@ describe("account deletion migration", () => {
     expect(migration).toContain("interval '10 minutes'");
     expect(migration).toContain("pg_catalog.pg_advisory_xact_lock");
     expect(migration).toContain("set search_path = ''");
+    expect(migration).toContain("if tg_table_name = 'tapact_notifications' then");
+    expect(migration).toContain("target := new.recipient_id");
+    expect(migration).not.toContain("when tg_table_name = 'tapact_notifications' then new.recipient_id");
     expect(migration).toContain("grant execute on function public.tapact_prepare_account_deletion(text) to authenticated");
     expect(migration).toContain("revoke all on function public.tapact_prepare_account_deletion(text) from public, anon");
     expect(migration).not.toContain("delete from auth.users");
@@ -53,7 +58,11 @@ describe("account deletion migration", () => {
 
   it("scrubs shared notices and removes personal stores", () => {
     expect(migration).toContain("left('Former member' || substr(n.body, char_length(v_name) + 1), 240)");
-    expect(migration).toContain("replace(n.dedupe_key, uid::text, 'former')");
+    expect(migration).toContain("accepted your duel%");
+    expect(migration).toContain("left('former:' || n.id::text, 160)");
+    expect(migration).toContain("f.user_id is distinct from uid");
+    expect(migration).toContain("'creator', (d.creator_id = uid) is true");
+    expect(migration).toContain("'creator', (me.user_id = d.creator_id) is true");
     expect(migration).toContain("delete from public.tapact_activities where user_id = uid");
     expect(migration).toContain("delete from public.tapact_notifications where recipient_id = uid");
     expect(migration).toContain("delete from public.tapact_push_subscriptions where user_id = uid");
