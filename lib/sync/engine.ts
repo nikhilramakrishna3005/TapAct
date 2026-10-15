@@ -11,6 +11,7 @@ import { SyncError, type SyncRemote } from "./remote";
 import {
   addToOutbox,
   getOutbox,
+  isAccountBlocked,
   loadStash,
   loadSyncCache,
   loadSyncMeta,
@@ -67,6 +68,9 @@ async function pullIntoCache(deps: SyncDeps, userId: string): Promise<SyncCache 
 /** Full cycle: settle the timer, upload unconfirmed changes, pull, and rebuild the local view. */
 export async function runSync(deps: SyncDeps, account: SyncOwner): Promise<SyncRunResult> {
   const { userId } = account;
+  if (isAccountBlocked(loadSyncMeta(deps.storage), userId)) {
+    return { kind: "aborted" };
+  }
   if (loadSyncMeta(deps.storage).owner?.userId !== userId) {
     return { kind: "needs-decision" };
   }
@@ -85,6 +89,7 @@ export async function runSync(deps: SyncDeps, account: SyncOwner): Promise<SyncR
 
   const outbox = getOutbox(meta, userId);
   if (outboxSize(outbox) > 0) {
+    if (isAccountBlocked(loadSyncMeta(deps.storage), userId)) return { kind: "aborted" };
     await deps.remote.push(userId, outbox);
     if (!deps.isCurrent(userId)) return { kind: "aborted" };
     saveSyncMeta(deps.storage, removeConfirmed(loadSyncMeta(deps.storage), userId, outbox));
@@ -115,6 +120,9 @@ export async function runSync(deps: SyncDeps, account: SyncOwner): Promise<SyncR
  */
 export async function importLocalData(deps: SyncDeps, account: SyncOwner): Promise<SyncRunResult> {
   const meta = loadSyncMeta(deps.storage);
+  if (isAccountBlocked(meta, account.userId)) {
+    return { kind: "aborted" };
+  }
   if (meta.owner) {
     throw new SyncError("server", "This device's data already belongs to an account.");
   }
@@ -136,6 +144,9 @@ export async function importLocalData(deps: SyncDeps, account: SyncOwner): Promi
 /** Merges a guest data set that was kept aside earlier into the signed-in account. */
 export async function mergeStashedData(deps: SyncDeps, account: SyncOwner, stashId: string): Promise<SyncRunResult> {
   const meta = loadSyncMeta(deps.storage);
+  if (isAccountBlocked(meta, account.userId)) {
+    return { kind: "aborted" };
+  }
   if (meta.owner?.userId !== account.userId) {
     return { kind: "needs-decision" };
   }
@@ -175,6 +186,9 @@ export async function adoptAccount(
   options: { keepCurrent: boolean },
 ): Promise<SyncRunResult> {
   const { userId } = account;
+  if (isAccountBlocked(loadSyncMeta(deps.storage), userId)) {
+    return { kind: "aborted" };
+  }
   const startMeta = loadSyncMeta(deps.storage);
   const ownStash = loadStash(deps.storage, deps.now())
     .filter((item) => item.ownerUserId === userId && !item.mergedIntoUserId)

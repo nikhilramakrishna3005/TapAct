@@ -56,8 +56,11 @@ describe("privacy and terms copy", () => {
     expect(privacy).toContain("Supabase Database Webhook");
     expect(privacy).toContain("scheduled Vercel cron");
     expect(privacy).toContain("not guaranteed to be immediate");
-    expect(privacy).toContain("TapAct does not yet offer account deletion");
+    expect(privacy).toContain("Account deletion is not currently offered");
+    expect(privacy).toContain("Former member");
+    expect(privacy).toContain("cannot be recalled");
     expect(privacy).toContain("Signing out is not deletion");
+    expect(privacy).not.toContain("You delete the account from Settings");
     expect(privacy).not.toContain("nikhilramakrishna30@gmail.com");
     expect(privacy).toContain("Supabase");
     expect(privacy).toContain("Vercel");
@@ -71,12 +74,25 @@ describe("privacy and terms copy", () => {
   it("keeps terms short and free of an invented company", () => {
     const terms = prose(termsSections("maintainer@tapact.dev"));
     expect(terms).toContain("free, early-stage");
-    expect(terms).toContain("Self-serve account deletion is not available yet");
+    expect(terms).toContain("Account deletion is not currently offered");
     expect(terms).toContain("maintainer@tapact.dev");
     expect(terms).toContain("Writing to it does not delete an account");
     expect(terms).not.toContain("example@example.com");
     expect(terms.toLowerCase()).not.toContain("warranty");
     expect(terms).not.toMatch(/\bInc\b|\bLLC\b|\bLtd\b/);
+  });
+
+  it("describes the live deletion flow only when deletion is offered", () => {
+    const privacy = prose(privacySections(null, true));
+    const terms = prose(termsSections("maintainer@tapact.dev", true));
+    expect(privacy).toContain("You delete the account from Settings → Account");
+    expect(privacy).toContain("A refreshed session is not a new sign-in");
+    expect(privacy).toContain("does not restore the personal data");
+    expect(privacy).toContain("Former member");
+    expect(privacy).toContain("cannot be recalled");
+    expect(privacy).not.toContain("not currently offered on this site");
+    expect(terms).toContain("Settings → Account");
+    expect(terms).toContain("Writing to it does not delete an account");
   });
 });
 

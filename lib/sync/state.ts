@@ -43,6 +43,8 @@ export type SyncMeta = {
   outboxes: Outbox[];
   lastSyncedAtMs: number | null;
   lastSyncedUserId: string | null;
+  /** Accounts whose local data must not be uploaded again after deletion. */
+  blockedUserIds?: string[];
 };
 
 export type PullCursor = { updatedAt: string; id: string } | null;
@@ -161,6 +163,16 @@ export function sanitizeSnapshot(value: unknown): SyncSnapshot {
   };
 }
 
+function sanitizeBlocked(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const ids = value.filter((item): item is string => typeof item === "string" && item.length > 0 && item.length <= 64);
+  return [...new Set(ids)].slice(0, 20);
+}
+
+export function isAccountBlocked(meta: SyncMeta, userId: string): boolean {
+  return (meta.blockedUserIds ?? []).includes(userId);
+}
+
 function sanitizeOwner(value: unknown): SyncOwner | null {
   if (!isRecord(value)) return null;
   const userId = str(value.userId, 64);
@@ -193,6 +205,7 @@ export function loadSyncMeta(storage: WritableStorageLike | null): SyncMeta {
       : [],
     lastSyncedAtMs: candidate && isFiniteNumber(candidate.lastSyncedAtMs) ? candidate.lastSyncedAtMs : null,
     lastSyncedUserId: candidate ? str(candidate.lastSyncedUserId, 64) : null,
+    blockedUserIds: candidate ? sanitizeBlocked(candidate.blockedUserIds) : [],
   };
   if (!deviceId) {
     writeJson(storage, SYNC_META_KEY, meta);

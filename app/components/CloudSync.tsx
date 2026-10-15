@@ -2,7 +2,8 @@
 
 import { AnimatePresence } from "motion/react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import type { TrackerState } from "@/lib/tracker";
+import { forgetDeletedAccount } from "@/lib/account/deviceCleanup";
+import { createDefaultTrackerState, type TrackerState } from "@/lib/tracker";
 import type { TrackerUpdate, WritableStorageLike } from "@/lib/trackerStore";
 import { SYNC_DIRTY_EVENT } from "@/lib/sync/capture";
 import {
@@ -64,6 +65,8 @@ type CloudSyncValue = {
   mergeStash: (stashId: string) => Promise<void>;
   /** Must run before a backup restore replaces account-owned data. */
   beforeRestore: () => void;
+  /** After the server confirms Auth deletion. Stops this account's local sync. */
+  applyLocalDeletion: (userId: string) => void;
   /** Edits, adds or deletes a recorded session (queued offline, synced in the background). */
   rescueSession: (change: SessionChange) => RescueResult;
 };
@@ -350,6 +353,17 @@ export function CloudSyncProvider({
     [commit, refresh],
   );
 
+  const applyLocalDeletion = useCallback(
+    (userId: string) => {
+      const result = forgetDeletedAccount(getStorage(), userId, Date.now());
+      if (result.resetTracker) {
+        commit(() => createDefaultTrackerState(Date.now()), { source: "sync" });
+      }
+      refresh();
+    },
+    [commit, refresh],
+  );
+
   const closePrompt = useCallback(() => {
     dismissedForRef.current = accountRef.current?.userId ?? null;
     setPromptOpen(false);
@@ -374,9 +388,11 @@ export function CloudSyncProvider({
       mergeStash,
       beforeRestore,
       rescueSession,
+      applyLocalDeletion,
     }),
     [
       account?.userId,
+      applyLocalDeletion,
       beforeRestore,
       rescueSession,
       decision,

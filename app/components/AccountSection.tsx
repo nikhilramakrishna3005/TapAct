@@ -22,6 +22,7 @@ import { getInitials } from "@/lib/auth/account";
 import { DURATION, EASE_OUT } from "@/lib/motion";
 import { summarizeState } from "@/lib/backup";
 import { useAuth } from "./AuthProvider";
+import { DeleteAccount } from "./DeleteAccount";
 import { LegalLinks } from "./legal/LegalLinks";
 import { type SyncStatus, useCloudSync } from "./CloudSync";
 import { downloadBackup } from "./downloadBackup";
@@ -223,12 +224,16 @@ function SignedOutDataNote() {
 
 function ManageAccount({
   email,
+  userId,
   signingOut,
   onSignOut,
+  onDeleted,
 }: {
   email: string | null;
+  userId: string;
   signingOut: boolean;
   onSignOut: () => void;
+  onDeleted: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const reactId = useId();
@@ -270,6 +275,7 @@ function ManageAccount({
           <p className="mt-2 text-center text-[0.68rem] text-text-3">
             Signing out keeps all activity on this device. Unsynced changes upload when you sign back in.
           </p>
+          {email !== undefined && userId && <DeleteAccount email={email} userId={userId} onDeleted={onDeleted} />}
         </div>
       )}
     </div>
@@ -279,6 +285,7 @@ function ManageAccount({
 export function AccountSection() {
   const { status, account, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
+  const [deleted, setDeleted] = useState(false);
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -318,6 +325,11 @@ export function AccountSection() {
 
           {status === "signed-out" && (
             <>
+              {deleted && (
+                <p role="status" className="mb-3 text-xs leading-relaxed text-text-1">
+                  Your account has been deleted. This device&apos;s copy of that account&apos;s tracking was cleared. Other accounts stored on this device were left in place.
+                </p>
+              )}
               <p className="text-xs leading-relaxed text-text-2">
                 You&apos;re using TapAct as a guest. Signing in is optional, and your activity on this device stays
                 exactly where it is.
@@ -376,7 +388,13 @@ export function AccountSection() {
                 <SyncStatusBadge />
               </div>
               <AccountAttention />
-              <ManageAccount email={account.email} signingOut={signingOut} onSignOut={() => void handleSignOut()} />
+              <ManageAccount
+                email={account.email}
+                userId={account.id}
+                signingOut={signingOut}
+                onSignOut={() => void handleSignOut()}
+                onDeleted={() => setDeleted(true)}
+              />
             </>
           )}
         </motion.div>

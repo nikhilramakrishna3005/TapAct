@@ -1,7 +1,7 @@
 import type { TrackerState } from "../tracker";
 import type { WritableStorageLike } from "../trackerStore";
 import { runningSegment, sameActivityFields, type SyncActivity, type TimeEntry, toSyncActivity } from "./merge";
-import { addToOutbox, loadSyncMeta, saveSyncMeta, type SyncMeta } from "./state";
+import { addToOutbox, isAccountBlocked, loadSyncMeta, saveSyncMeta, type SyncMeta } from "./state";
 
 export const SYNC_DIRTY_EVENT = "tapact:sync-dirty";
 
@@ -44,7 +44,7 @@ export function captureCommit(
   nowMs: number,
   options: CaptureOptions,
 ): SyncMeta {
-  if (!meta.owner) {
+  if (!meta.owner || isAccountBlocked(meta, meta.owner.userId)) {
     return meta;
   }
   const entries: TimeEntry[] = [];
