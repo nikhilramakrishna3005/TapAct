@@ -660,14 +660,7 @@ function Home() {
         animate={{ opacity: onboarding === "pending" ? 0 : 1 }}
         transition={{ duration: DURATION.instant }}
       >
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={tab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: DURATION.quick, ease: EASE_OUT }}
-          >
+        <div key={tab}>
             {tab === "insights" ? (
               <InsightsView tracker={liveTracker} todayKey={todayKey} />
             ) : tab === "duels" ? (
@@ -873,8 +866,7 @@ function Home() {
                 </section>
               </>
             )}
-          </motion.div>
-        </AnimatePresence>
+        </div>
 
         {!hydrated && (
           <p className="mt-3 text-center text-xs text-text-3">Syncing your local session…</p>
