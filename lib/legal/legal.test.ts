@@ -88,6 +88,8 @@ describe("privacy and terms copy", () => {
     expect(privacy).toContain("You delete the account from Settings → Account");
     expect(privacy).toContain("A refreshed session is not a new sign-in");
     expect(privacy).toContain("does not restore the personal data");
+    expect(privacy).toContain("without signing in again");
+    expect(prose(privacySections(null, false))).not.toContain("without signing in again");
     expect(privacy).toContain("Former member");
     expect(privacy).toContain("cannot be recalled");
     expect(privacy).not.toContain("not currently offered on this site");

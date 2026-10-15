@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { expiredCookieAssignments, supabaseAuthCookieNames } from "@/lib/account/localSession";
 import { type AccountSummary, summarizeUser } from "@/lib/auth/account";
 import { releaseDevicePushSubscription } from "@/lib/push/browser";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -10,8 +11,8 @@ export type AuthStatus = "loading" | "signed-in" | "signed-out" | "unavailable";
 type AuthValue = {
   status: AuthStatus;
   account: AccountSummary | null;
-  /** Clears only the auth session. Local tracking data is never touched. */
-  signOut: () => Promise<void>;
+  /** Clears only the auth session. Local tracking data is never touched. False when the session is still stored. */
+  signOut: () => Promise<boolean>;
 };
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -48,19 +49,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const signOut = useCallback(async () => {
+  const signOut = useCallback(async (): Promise<boolean> => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) {
-      return;
+      setAccount(null);
+      setStatus("signed-out");
+      return true;
     }
     try {
       await releaseDevicePushSubscription();
-      // Supabase removes the local session even if the network call fails.
-      await supabase.auth.signOut({ scope: "local" });
-    } finally {
-      setAccount(null);
-      setStatus("signed-out");
+    } catch {
+      // A push-unsubscribe failure must not leave a deleted account signed in.
     }
+    let localCallSucceeded = false;
+    try {
+      // scope local removes this browser's session even when the Auth server is unreachable.
+      await supabase.auth.signOut({ scope: "local" });
+      localCallSucceeded = true;
+    } catch {
+      try {
+        for (const assignment of expiredCookieAssignments(supabaseAuthCookieNames(document.cookie))) {
+          document.cookie = assignment;
+        }
+      } catch {
+        // The session check below reports whether a session is still stored.
+      }
+    }
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) return false;
+    } catch {
+      if (!localCallSucceeded) return false;
+    }
+    setAccount(null);
+    setStatus("signed-out");
+    return true;
   }, []);
 
   const value = useMemo(() => ({ status, account, signOut }), [account, signOut, status]);

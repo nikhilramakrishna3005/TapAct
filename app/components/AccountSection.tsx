@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useId, useRef, useState } from "react";
+import { deletionOutcome } from "@/lib/account/deletionOutcome";
 import { getInitials } from "@/lib/auth/account";
 import { DURATION, EASE_OUT } from "@/lib/motion";
 import { summarizeState } from "@/lib/backup";
@@ -203,6 +204,46 @@ function StashList() {
   );
 }
 
+function DeletedAccountNotice({
+  deleted,
+  clearDevice,
+  onCleared,
+}: {
+  deleted: { userId: string; deviceCleaned: boolean };
+  clearDevice: () => { deviceCleaned: boolean };
+  onCleared: (deviceCleaned: boolean) => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const outcome = deletionOutcome({
+    serverDeleted: true,
+    deviceCleaned: deleted.deviceCleaned,
+    signedOut: true,
+    serverMessage: null,
+  });
+  return (
+    <div className="mb-3">
+      <p role="status" className="text-xs leading-relaxed text-text-1">
+        {outcome.title} {outcome.detail}
+      </p>
+      {!deleted.deviceCleaned && (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            setPending(true);
+            const progress = clearDevice();
+            onCleared(progress.deviceCleaned);
+            setPending(false);
+          }}
+          className="btn btn-ghost mt-3 h-11 w-full"
+        >
+          {pending ? "Clearing this device…" : "Clear this device"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function SignedOutDataNote() {
   const sync = useCloudSync();
   if (!sync.dataOwner) {
@@ -233,7 +274,7 @@ function ManageAccount({
   userId: string;
   signingOut: boolean;
   onSignOut: () => void;
-  onDeleted: () => void;
+  onDeleted: (result: { userId: string; deviceCleaned: boolean }) => void;
 }) {
   const [open, setOpen] = useState(false);
   const reactId = useId();
@@ -285,7 +326,8 @@ function ManageAccount({
 export function AccountSection() {
   const { status, account, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
-  const [deleted, setDeleted] = useState(false);
+  const [deleted, setDeleted] = useState<{ userId: string; deviceCleaned: boolean } | null>(null);
+  const sync = useCloudSync();
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -326,9 +368,11 @@ export function AccountSection() {
           {status === "signed-out" && (
             <>
               {deleted && (
-                <p role="status" className="mb-3 text-xs leading-relaxed text-text-1">
-                  Your account has been deleted. This device&apos;s copy of that account&apos;s tracking was cleared. Other accounts stored on this device were left in place.
-                </p>
+                <DeletedAccountNotice
+                  deleted={deleted}
+                  onCleared={(deviceCleaned) => setDeleted({ ...deleted, deviceCleaned })}
+                  clearDevice={() => sync.applyLocalDeletion(deleted.userId)}
+                />
               )}
               <p className="text-xs leading-relaxed text-text-2">
                 You&apos;re using TapAct as a guest. Signing in is optional, and your activity on this device stays
@@ -393,7 +437,7 @@ export function AccountSection() {
                 userId={account.id}
                 signingOut={signingOut}
                 onSignOut={() => void handleSignOut()}
-                onDeleted={() => setDeleted(true)}
+                onDeleted={setDeleted}
               />
             </>
           )}

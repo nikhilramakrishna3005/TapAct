@@ -1,3 +1,4 @@
+import { deletionStopsSync } from "../account/deletionReceipt";
 import type { TrackerState } from "../tracker";
 import type { WritableStorageLike } from "../trackerStore";
 import { runningSegment, sameActivityFields, type SyncActivity, type TimeEntry, toSyncActivity } from "./merge";
@@ -16,7 +17,7 @@ export function recordCommit(
   if (!storage) return false;
   try {
     const meta = loadSyncMeta(storage);
-    if (!meta.owner) return false;
+    if (!meta.owner || deletionStopsSync(storage, meta.owner.userId)) return false;
     const updated = captureCommit(meta, base, next, nowMs, options);
     if (updated === meta) return false;
     saveSyncMeta(storage, updated);

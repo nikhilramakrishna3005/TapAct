@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { emailsMatch, performAccountDeletion, signedInRecently, type DeletionDeps } from "./deletion";
+import { deletionOutcome } from "./deletionOutcome";
+import { expiredCookieAssignments, supabaseAuthCookieNames } from "./localSession";
+import { authDeletionAlreadyDone, deletionOriginAllowed, emailsMatch, performAccountDeletion, signedInRecently, type DeletionDeps } from "./deletion";
 
 const NOW = Date.parse("2026-10-15T18:00:00.000Z");
 
@@ -113,6 +115,54 @@ describe("account deletion route decisions", () => {
     expect(second).toEqual({ ok: true });
   });
 
+  it("treats an Auth user that is already gone as deleted without preparing it again", async () => {
+    const harness = deps({
+      getUser: async () => {
+        throw new Error("already-deleted");
+      },
+    });
+    const result = await performAccountDeletion({ email: "ada@example.test", confirm: true }, harness);
+    expect(result).toEqual({ ok: true });
+    expect(harness.calls).toEqual([]);
+    expect(authDeletionAlreadyDone({ status: 404, message: "User not found" })).toBe(true);
+    expect(authDeletionAlreadyDone({ status: 500, message: "admin down" })).toBe(false);
+  });
+
+  it("accepts only this site's Origin on the deletion POST", () => {
+    expect(deletionOriginAllowed("https://staging.example.test/api/account/deletion", "https://staging.example.test")).toBe(true);
+    expect(deletionOriginAllowed("https://staging.example.test/api/account/deletion", "https://evil.example")).toBe(false);
+    expect(deletionOriginAllowed("https://staging.example.test/api/account/deletion", null)).toBe(false);
+    expect(deletionOriginAllowed("http://internal/", "https://staging.example.test", "staging.example.test")).toBe(true);
+  });
+
+  it("keeps server deletion distinct from device cleanup", () => {
+    const cleaned = deletionOutcome({ serverDeleted: true, deviceCleaned: true, signedOut: true, serverMessage: null });
+    const localFailure = deletionOutcome({
+      serverDeleted: true,
+      deviceCleaned: false,
+      signedOut: false,
+      serverMessage: "Couldn't delete the account. Check your connection and try again.",
+    });
+    const signOutFailure = deletionOutcome({ serverDeleted: true, deviceCleaned: true, signedOut: false, serverMessage: null });
+    expect(cleaned.allowServerRetry).toBe(false);
+    expect(cleaned.allowPassword).toBe(false);
+    expect(cleaned.title).toBe("Your account has been deleted.");
+    expect(localFailure.title).toBe("Your account has been deleted.");
+    expect(localFailure.allowServerRetry).toBe(false);
+    expect(localFailure.allowPassword).toBe(false);
+    expect(localFailure.detail).not.toMatch(/still exists|sign in again|Couldn't delete/i);
+    expect(localFailure.detail).toContain("Clear");
+    expect(signOutFailure.allowServerRetry).toBe(false);
+    expect(signOutFailure.allowPassword).toBe(false);
+    expect(signOutFailure.detail).toContain("Finish signing out");
+    expect(signOutFailure.detail).not.toMatch(/still exists|sign in again/i);
+    expect(supabaseAuthCookieNames("sb-abc-auth-token=1; theme=dark; sb-abc-auth-token.0=2")).toEqual([
+      "sb-abc-auth-token",
+      "sb-abc-auth-token.0",
+    ]);
+    expect(expiredCookieAssignments(["sb-abc-auth-token"])).toEqual(["sb-abc-auth-token=; Max-Age=0; path=/"]);
+  });
+
   it("stays off unless the server flag is enabled", async () => {
     let read = false;
     const harness = deps({
@@ -131,7 +181,10 @@ describe("account deletion route decisions", () => {
     const route = readFileSync(resolve(process.cwd(), "app/api/account/deletion/route.ts"), "utf8");
     const screen = readFileSync(resolve(process.cwd(), "app/components/DeleteAccount.tsx"), "utf8");
     expect(route).toContain("auth.getUser()");
-    expect(route).not.toContain(".getSession(");
+    expect(route.indexOf("auth.getUser()")).toBeLessThan(route.indexOf(".getSession("));
+    expect(route).toContain("deletionOriginAllowed");
+    expect(route).toContain("private, no-store");
+    expect(route).toContain("getUserById");
     expect(route).toContain("SUPABASE_SERVICE_ROLE_KEY");
     expect(route).toContain("auth.admin.deleteUser");
     expect(screen).not.toContain("SERVICE_ROLE");
@@ -139,5 +192,10 @@ describe("account deletion route decisions", () => {
     expect(screen).toContain("disabled={pending");
     expect(screen).toContain("Deleting account…");
     expect(screen).toContain("Account deletion is not available yet");
+    expect(screen).toContain("Clear this device");
+    expect(screen).toContain("Finish signing out");
+    const afterServerSuccess = screen.slice(screen.indexOf("serverDeleted = true"));
+    expect(afterServerSuccess).not.toContain("signInWithPassword");
+    expect(afterServerSuccess).not.toContain("/api/account/deletion");
   });
 });

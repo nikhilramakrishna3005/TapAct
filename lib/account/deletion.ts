@@ -48,6 +48,32 @@ function errorText(error: unknown): string {
   return "";
 }
 
+/** Cookie-authenticated POST must come from this site. A missing Origin is rejected. */
+export function deletionOriginAllowed(requestUrl: string, origin: string | null, hostHeader?: string | null): boolean {
+  if (!origin) return false;
+  let originValue: string;
+  try {
+    originValue = new URL(origin).origin;
+  } catch {
+    return false;
+  }
+  try {
+    if (originValue === new URL(requestUrl).origin) return true;
+  } catch {
+    // Fall through to the Host header when the request URL is not absolute.
+  }
+  const host = hostHeader?.split(",")[0]?.trim();
+  if (!host) return false;
+  return originValue === `https://${host}` || originValue === `http://${host}`;
+}
+
+/** Admin deletion of an id that Auth has already removed is completion, not a failure to retry with a new sign-in. */
+export function authDeletionAlreadyDone(error: { status?: number; code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.status === 404 || error.code === "user_not_found") return true;
+  return /user not found/i.test(error.message ?? "");
+}
+
 function prepareFailure(error: unknown): DeletionResult {
   const text = errorText(error);
   if (text === "unavailable" || /could not find the function|schema cache|does not exist/i.test(text)) {
@@ -84,7 +110,13 @@ export async function performAccountDeletion(body: unknown, deps: DeletionDeps):
   if (record.confirm !== true) return fail(400, "confirm");
   if (typeof record.email !== "string") return fail(400, "email");
 
-  const account = await deps.getUser();
+  let account: AuthenticatedAccount | null;
+  try {
+    account = await deps.getUser();
+  } catch (error) {
+    if (errorText(error) === "already-deleted") return { ok: true };
+    return fail(401, "unauthorized");
+  }
   if (!account?.id) return fail(401, "unauthorized");
   if (!emailsMatch(record.email, account.email)) return fail(400, "email");
   if (!signedInRecently(account.lastSignInAt, deps.now())) return fail(401, "reauth");

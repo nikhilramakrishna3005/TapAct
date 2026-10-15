@@ -22,7 +22,7 @@ export function supportParagraph(email: string | null, deletionOffered = account
 
 export function deletionParagraphs(deletionOffered: boolean): string[] {
   const request = deletionOffered
-    ? "You delete the account from Settings → Account. You sign in again, type the account email, and confirm that the deletion is permanent. A refreshed session is not a new sign-in. The account is not deleted until sign-in removal succeeds. If that last step fails, sign in again and retry. The retry does not restore the personal data already prepared for deletion."
+    ? "You delete the account from Settings → Account. You sign in again, type the account email, and confirm that the deletion is permanent. A refreshed session is not a new sign-in. The account is not deleted until sign-in removal succeeds. If that last step fails, sign in again and retry. The retry does not restore the personal data already prepared for deletion. If this browser cannot clear its local copy after the account is deleted, the account is still gone. Clear that leftover copy on this device without signing in again."
     : "Account deletion is not currently offered on this site. The Settings control stays off until the database update is applied and the full flow has been checked. When it is offered, you will delete the account from Settings → Account after signing in again and typing your email.";
   return [
     request,

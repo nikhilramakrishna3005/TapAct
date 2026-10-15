@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { deletionOutcome, type DeletionOutcome } from "@/lib/account/deletionOutcome";
 import { normalizeEmail } from "@/lib/auth/validation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuth } from "./AuthProvider";
@@ -15,7 +16,7 @@ export function DeleteAccount({
 }: {
   email: string | null;
   userId: string;
-  onDeleted: () => void;
+  onDeleted: (result: { userId: string; deviceCleaned: boolean }) => void;
 }) {
   const auth = useAuth();
   const sync = useCloudSync();
@@ -26,6 +27,7 @@ export function DeleteAccount({
   const [needsReauth, setNeedsReauth] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<DeletionOutcome | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,10 +44,46 @@ export function DeleteAccount({
     };
   }, []);
 
+  const settleLocally = async (deviceCleaned: boolean, signedOut: boolean) => {
+    const next = deletionOutcome({ serverDeleted: true, deviceCleaned, signedOut, serverMessage: null });
+    setOutcome(next);
+    if (signedOut) onDeleted({ userId, deviceCleaned });
+  };
+
+  const clearThisDevice = async () => {
+    if (pending) return;
+    setPending(true);
+    const progress = sync.applyLocalDeletion(userId);
+    let signedOut = outcome?.signedOut ?? false;
+    if (!signedOut) {
+      try {
+        signedOut = await auth.signOut();
+      } catch {
+        signedOut = false;
+      }
+    }
+    await settleLocally(progress.deviceCleaned, signedOut);
+    setPending(false);
+  };
+
+  const finishSigningOut = async () => {
+    if (pending) return;
+    setPending(true);
+    let signedOut = false;
+    try {
+      signedOut = await auth.signOut();
+    } catch {
+      signedOut = false;
+    }
+    await settleLocally(outcome?.deviceCleaned ?? false, signedOut);
+    setPending(false);
+  };
+
   const submit = async () => {
-    if (pending || availability !== "on") return;
+    if (pending || availability !== "on" || outcome?.serverDeleted) return;
     setPending(true);
     setError(null);
+    let serverDeleted = false;
     try {
       if (needsReauth) {
         const supabase = getSupabaseBrowserClient();
@@ -74,10 +112,20 @@ export function DeleteAccount({
         setError(body?.error ?? "Couldn't delete the account. Try again.");
         return;
       }
-      sync.applyLocalDeletion(userId);
-      onDeleted();
-      await auth.signOut();
+      serverDeleted = true;
+      const progress = sync.applyLocalDeletion(userId);
+      let signedOut = false;
+      try {
+        signedOut = await auth.signOut();
+      } catch {
+        signedOut = false;
+      }
+      await settleLocally(progress.deviceCleaned, signedOut);
     } catch {
+      if (serverDeleted) {
+        await settleLocally(false, false);
+        return;
+      }
       setError("Couldn't delete the account. Check your connection and try again.");
     } finally {
       setPending(false);
@@ -93,7 +141,24 @@ export function DeleteAccount({
           Account deletion is not available yet. It stays off until the database update is applied and the full deletion flow has been checked.
         </p>
       )}
-      {availability === "on" && (
+      {availability === "on" && outcome?.serverDeleted && (
+        <div className="mt-2 space-y-3">
+          <p role="status" className="text-[0.72rem] leading-relaxed text-text-1">
+            {outcome.title} {outcome.detail}
+          </p>
+          {!outcome.deviceCleaned && (
+            <button type="button" onClick={() => void clearThisDevice()} disabled={pending} className="btn btn-ghost h-12 w-full">
+              {pending ? "Clearing this device…" : "Clear this device"}
+            </button>
+          )}
+          {outcome.deviceCleaned && !outcome.signedOut && (
+            <button type="button" onClick={() => void finishSigningOut()} disabled={pending} className="btn btn-ghost h-12 w-full">
+              {pending ? "Signing out…" : "Finish signing out"}
+            </button>
+          )}
+        </div>
+      )}
+      {availability === "on" && !outcome?.serverDeleted && (
         <form
           className="mt-2 space-y-3"
           onSubmit={(event) => {
