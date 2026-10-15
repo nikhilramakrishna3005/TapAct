@@ -10,8 +10,9 @@ import {
   replaceActivityDraft,
 } from "@/lib/duels/manage";
 import { describeRuleChanges, type RuleChange } from "@/lib/duels/rules";
+import { activeNameMatches, trackerCommitPersisted } from "@/lib/duels/connect";
 import { addActivity, createActivityId, type TrackerState } from "@/lib/tracker";
-import type { TrackerUpdate } from "@/lib/trackerStore";
+import type { CommitResult, TrackerUpdate } from "@/lib/trackerStore";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { Sheet } from "../ui";
@@ -26,7 +27,7 @@ export function ManageActivitiesSheet({
 }: {
   board: DuelBoard;
   tracker: TrackerState;
-  commit: (update: TrackerUpdate) => void;
+  commit: (update: TrackerUpdate) => CommitResult | void;
   busy: boolean;
   onAct: (work: () => Promise<void>, note?: string) => Promise<void>;
   onClose: () => void;
@@ -100,8 +101,21 @@ export function ManageActivitiesSheet({
       addShared(name, draftMinutes, draftTracker);
       return;
     }
+    const matches = activeNameMatches(personal, name);
+    if (matches.length > 1) {
+      setError("More than one Today activity uses that name. Choose which one to use.");
+      return;
+    }
+    if (matches.length === 1) {
+      addShared(name, draftMinutes, matches[0].id);
+      return;
+    }
     const id = createActivityId(name);
-    commit((base) => addActivity(base, { id, name, iconKey: "briefcase", color: "#8E7BFF", goalMinutes: draftMinutes, cue: "Duel activity" }));
+    const saved = commit((base) => addActivity(base, { id, name, iconKey: "briefcase", color: "#8E7BFF", goalMinutes: draftMinutes, cue: "Duel activity" }));
+    if (!trackerCommitPersisted(saved)) {
+      setError("Couldn't save the new activity on this device.");
+      return;
+    }
     addShared(name, draftMinutes, id);
   };
 
@@ -187,7 +201,7 @@ export function ManageActivitiesSheet({
       {adding && canEdit && !proposal && (
         <div className="mt-4 rounded-[18px] border border-line bg-ink-0 px-3 py-3">
           <p className="text-sm font-semibold text-text-1">Add activity</p>
-          <p className="mt-1 text-xs text-text-3">Pick one of your Today activities or create a new one. A matching name is not selected for you. This will not add it to your friend's Today list.</p>
+          <p className="mt-1 text-xs text-text-3">Pick one of your Today activities or create a new one. One matching name is reused. Several matches need a choice. This will not add it to your friend's Today list.</p>
           <ul className="mt-2 max-h-40 overflow-y-auto">
             {personal.map((item) => (
               <li key={item.id}>

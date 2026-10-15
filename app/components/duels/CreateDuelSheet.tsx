@@ -4,8 +4,9 @@ import { type FormEvent, useState } from "react";
 import { deviceTimeZone, deviceTodayKey, duelError, shareInvite } from "@/lib/duels/api";
 import { suggestDuelTitle, validateDuelDraft, type DuelActivityDraft } from "@/lib/duels/invite";
 import { DUEL_DURATIONS, type DuelDuration } from "@/lib/duels/score";
+import { activeNameMatches, trackerCommitPersisted } from "@/lib/duels/connect";
 import { addActivity, createActivityId, type Activity, type TrackerState } from "@/lib/tracker";
-import type { TrackerUpdate } from "@/lib/trackerStore";
+import type { CommitResult, TrackerUpdate } from "@/lib/trackerStore";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { duelsApi } from "@/lib/duels/api";
 import { Sheet } from "../ui";
@@ -19,7 +20,7 @@ export function CreateDuelSheet({
   onCreated,
 }: {
   tracker: TrackerState;
-  commit: (update: TrackerUpdate) => void;
+  commit: (update: TrackerUpdate) => CommitResult | void;
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -68,8 +69,13 @@ export function CreateDuelSheet({
       setError("A duel can include up to 3 activities.");
       return;
     }
-    const match = activeActivities.find((item) => item.name.trim().toLowerCase() === name.toLowerCase());
-    if (match) {
+    const matches = activeNameMatches(activeActivities, name);
+    if (matches.length > 1) {
+      setError("More than one Today activity uses that name. Select it above.");
+      return;
+    }
+    if (matches.length === 1) {
+      const match = matches[0];
       if (!activities.some((item) => item.trackerActivityId === match.id)) {
         setActivities((current) => [...current, { name: match.name, targetMinutes: freshMinutes, trackerActivityId: match.id }]);
       }
@@ -78,7 +84,11 @@ export function CreateDuelSheet({
       return;
     }
     const id = createActivityId(name);
-    commit((base) => addActivity(base, { id, name, iconKey: "briefcase", color: "#8E7BFF", goalMinutes: freshMinutes, cue: "Duel activity" }));
+    const saved = commit((base) => addActivity(base, { id, name, iconKey: "briefcase", color: "#8E7BFF", goalMinutes: freshMinutes, cue: "Duel activity" }));
+    if (!trackerCommitPersisted(saved)) {
+      setError("Couldn't save the new activity on this device.");
+      return;
+    }
     setActivities((current) => [...current, { name, targetMinutes: freshMinutes, trackerActivityId: id }]);
     setFreshName("");
     setError(null);
