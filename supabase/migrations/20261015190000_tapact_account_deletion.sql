@@ -225,6 +225,7 @@ declare
   mine uuid[];
   names text[];
   v_name text;
+  v_pattern text;
 begin
   if uid is null then
     raise exception 'Sign in to delete your account.';
@@ -268,25 +269,34 @@ begin
     and i.accepted_at is null
     and i.revoked_at is null;
 
+  -- Keep the shared rule proposal (activity name and target). Drop notes,
+  -- private tracker ids, and any other personal keys.
   update public.tapact_duel_proposals p
   set
     status = case when p.status = 'pending' then 'withdrawn' else p.status end,
     resolved_at = case when p.status = 'pending' then coalesce(p.resolved_at, now()) else p.resolved_at end,
     proposer_id = null,
-    payload = case
-      when jsonb_typeof(p.payload -> 'activities') = 'array' then jsonb_set(
-        p.payload,
-        '{activities}',
-        coalesce(
-          (
-            select jsonb_agg(item - 'trackerActivityId')
-            from jsonb_array_elements(p.payload -> 'activities') item
-          ),
-          '[]'::jsonb
-        )
+    payload = jsonb_build_object(
+      'activities',
+      coalesce(
+        (
+          select jsonb_agg(
+            jsonb_strip_nulls(jsonb_build_object(
+              'id', item -> 'id',
+              'name', item -> 'name',
+              'targetMinutes', item -> 'targetMinutes'
+            ))
+          )
+          from jsonb_array_elements(
+            case
+              when jsonb_typeof(p.payload -> 'activities') = 'array' then p.payload -> 'activities'
+              else '[]'::jsonb
+            end
+          ) item
+        ),
+        '[]'::jsonb
       )
-      else p.payload
-    end
+    )
   where p.proposer_id = uid;
 
   update public.tapact_duel_invites
@@ -314,32 +324,77 @@ begin
   where m.duel_id = d.id
     and m.user_id = uid;
 
-  -- Known notice templates only. Other sentences, proposal JSON besides
-  -- trackerActivityId, and already-delivered push payloads are not rewritten.
+  -- Notices that always name the actor are rebuilt from the duel title.
+  -- This does not search for the display name, so "Player" is not rewritten
+  -- just because it appears in an unrelated sentence.
+  update public.tapact_notifications n
+  set body = left(
+    case n.event_type
+      when 'invite_accepted' then 'Former member accepted your duel "' || d.title || '".'
+      when 'opponent_left' then 'Former member left "' || d.title || '".'
+      when 'proposal_received' then 'Former member proposed a change to "' || d.title || '".'
+      when 'proposal_approved' then 'Former member approved your changes to "' || d.title || '".'
+      when 'proposal_rejected' then 'Former member declined your changes to "' || d.title || '".'
+      else n.body
+    end,
+    240
+  )
+  from public.tapact_duels d
+  where n.duel_id = d.id
+    and n.duel_id = any(mine)
+    and n.recipient_id <> uid
+    and n.event_type in (
+      'invite_accepted',
+      'opponent_left',
+      'proposal_received',
+      'proposal_approved',
+      'proposal_rejected'
+    );
+
+  -- A distinctive display name can still sit in a free-form sentence. Skip
+  -- "Player" and "Former member", and skip a name the other member also uses,
+  -- because that sentence cannot be attributed to one person.
   foreach v_name in array names
   loop
-    if v_name is null or v_name = 'Former member' then
+    if v_name is null or char_length(btrim(v_name)) < 3 then
       continue;
     end if;
+    if lower(btrim(v_name)) in ('player', 'former member') then
+      continue;
+    end if;
+    v_pattern := '\m' || regexp_replace(btrim(v_name), '([^[:alnum:]_])', '\\\1', 'g') || '\M';
     update public.tapact_notifications n
-    set body = left('Former member' || substr(n.body, char_length(v_name) + 1), 240)
+    set body = left(regexp_replace(n.body, v_pattern, 'Former member', 'g'), 240)
     where n.duel_id = any(mine)
       and n.recipient_id <> uid
-      and left(n.body, char_length(v_name) + 1) = v_name || ' '
-      and (
-        substr(n.body, char_length(v_name) + 2) like 'accepted your duel%'
-        or substr(n.body, char_length(v_name) + 2) like 'left "%'
-        or substr(n.body, char_length(v_name) + 2) like 'proposed a change%'
-        or substr(n.body, char_length(v_name) + 2) like 'approved your changes%'
-        or substr(n.body, char_length(v_name) + 2) like 'declined your changes%'
+      and not exists (
+        select 1
+        from public.tapact_duel_members m
+        where m.duel_id = n.duel_id
+          and m.user_id is distinct from uid
+          and lower(btrim(m.display_name)) = lower(btrim(v_name))
       );
   end loop;
 
   update public.tapact_notifications n
-  set dedupe_key = left('former:' || n.id::text, 160)
+  set
+    body = left(
+      case
+        when char_length(btrim(replace(n.body, uid::text, ''))) = 0 then 'Former member'
+        else replace(n.body, uid::text, '')
+      end,
+      240
+    ),
+    dedupe_key = case
+      when position(uid::text in n.dedupe_key) > 0 then left('former:' || n.id::text, 160)
+      else n.dedupe_key
+    end
   where n.duel_id = any(mine)
     and n.recipient_id <> uid
-    and position(uid::text in n.dedupe_key) > 0;
+    and (
+      position(uid::text in n.body) > 0
+      or position(uid::text in n.dedupe_key) > 0
+    );
 
   update public.tapact_duel_members
   set user_id = null

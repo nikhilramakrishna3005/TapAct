@@ -57,9 +57,12 @@ describe("account deletion migration", () => {
   });
 
   it("scrubs shared notices and removes personal stores", () => {
-    expect(migration).toContain("left('Former member' || substr(n.body, char_length(v_name) + 1), 240)");
-    expect(migration).toContain("accepted your duel%");
+    expect(migration).toContain("Former member accepted your duel");
+    expect(migration).toContain("lower(btrim(v_name)) in ('player', 'former member')");
+    expect(migration).toContain("jsonb_build_object(");
+    expect(migration).toContain("'targetMinutes', item -> 'targetMinutes'");
     expect(migration).toContain("left('former:' || n.id::text, 160)");
+    expect(migration).not.toContain("item - 'trackerActivityId'");
     expect(migration).toContain("f.user_id is distinct from uid");
     expect(migration).toContain("'creator', (d.creator_id = uid) is true");
     expect(migration).toContain("'creator', (me.user_id = d.creator_id) is true");
@@ -67,7 +70,6 @@ describe("account deletion migration", () => {
     expect(migration).toContain("delete from public.tapact_notifications where recipient_id = uid");
     expect(migration).toContain("delete from public.tapact_push_subscriptions where user_id = uid");
     expect(migration).toContain("delete from public.tapact_duel_characters where user_id = uid");
-    expect(migration).toContain("item - 'trackerActivityId'");
     expect(migration).toContain("(accepted_by) references auth.users (id) on delete set null");
     expect(migration).toContain("(proposer_id) references auth.users (id) on delete set null");
   });

@@ -239,9 +239,12 @@ begin
     'pending'
   );
   insert into public.tapact_notifications (recipient_id, event_type, duel_id, title, body, dedupe_key) values
-    (bo, 'invite_accepted', active_duel, 'Invite accepted', 'Ada accepted your duel "Active duel".', 'legacy-accepted:' || active_duel::text),
+    (bo, 'invite_accepted', active_duel, 'Invite accepted', 'Yesterday Ada accepted your duel "Active duel" with a note.', 'legacy-accepted:' || active_duel::text),
     (bo, 'opponent_left', active_duel, 'Opponent left', 'Ada left "Active duel".', 'opponent_left:' || active_duel::text || ':' || ada::text),
     (bo, 'duel_started', active_duel, 'Duel started', 'Ada kept a private note in this sentence.', 'legacy-note:' || active_duel::text),
+    (bo, 'duel_finished', active_duel, 'Duel finished', 'Player kept a private note in this sentence.', 'legacy-player:' || active_duel::text),
+    (bo, 'rules_effective', active_duel, 'Rules updated', 'Reference ' || ada::text || ' stays out of history.', 'legacy-uuid:' || active_duel::text),
+    (cy, 'duel_started', multi_duel, 'Duel started', 'Casey kept a shared label.', 'legacy-shared:' || multi_duel::text),
     (ada, 'duel_started', active_duel, 'Duel started', 'Your own notice.', 'own-note:' || active_duel::text);
   insert into public.tapact_push_preferences (user_id) values (ada);
   insert into public.tapact_push_subscriptions (user_id, endpoint, p256dh, auth_key)
@@ -297,6 +300,10 @@ begin
   if exists (select 1 from public.tapact_duel_members where user_id = ada and display_name is distinct from 'Ada') then
     raise exception 'DELETION TEST FAILED: rejected confirmation changed a display name';
   end if;
+  -- Same label on both members: a sentence cannot be attributed, so it stays.
+  update public.tapact_duel_members
+  set display_name = 'Casey'
+  where duel_id = multi_duel;
   if not exists (select 1 from public.tapact_duels where id = pending_duel and creator_id = ada) then
     raise exception 'DELETION TEST FAILED: rejected confirmation changed the pending duel';
   end if;
@@ -414,22 +421,59 @@ begin
 
   if exists (
     select 1 from public.tapact_duel_proposals
-    where duel_id = active_duel and (proposer_id is not null or status <> 'withdrawn' or payload::text like '%trackerActivityId%' or payload ->> 'note' is distinct from 'Ada private note')
+    where duel_id = active_duel
+      and (
+        proposer_id is not null
+        or status <> 'withdrawn'
+        or payload::text like '%trackerActivityId%'
+        or payload::text like '%note%'
+        or payload::text like '%Ada%'
+        or payload -> 'activities' -> 0 ->> 'name' is distinct from 'Reading'
+        or (payload -> 'activities' -> 0 ->> 'targetMinutes')::int is distinct from 5
+      )
   ) then
-    raise exception 'DELETION TEST FAILED: proposal scrub did not match the expected remainder';
+    raise exception 'DELETION TEST FAILED: proposal payload was not limited to the shared rule';
   end if;
   if exists (
     select 1 from public.tapact_notifications
-    where recipient_id = bo and duel_id = active_duel and event_type in ('invite_accepted', 'opponent_left')
-      and (body not like 'Former member%' or position(ada::text in dedupe_key) > 0 or position(ada::text in body) > 0)
+    where recipient_id = bo and duel_id = active_duel and event_type = 'invite_accepted'
+      and body is distinct from 'Former member accepted your duel "Active duel".'
   ) then
-    raise exception 'DELETION TEST FAILED: known notice template still identifies Ada';
+    raise exception 'DELETION TEST FAILED: invite notice was not rebuilt from the duel title';
+  end if;
+  if exists (
+    select 1 from public.tapact_notifications
+    where recipient_id = bo and duel_id = active_duel and event_type = 'opponent_left'
+      and (body is distinct from 'Former member left "Active duel".' or position(ada::text in dedupe_key) > 0)
+  ) then
+    raise exception 'DELETION TEST FAILED: leave notice still identifies Ada';
   end if;
   if not exists (
     select 1 from public.tapact_notifications
-    where recipient_id = bo and body = 'Ada kept a private note in this sentence.'
+    where recipient_id = bo and body = 'Former member kept a private note in this sentence.'
   ) then
-    raise exception 'DELETION TEST FAILED: unexpected notice rewrite';
+    raise exception 'DELETION TEST FAILED: a distinctive name remained in a free-form notice';
+  end if;
+  if not exists (
+    select 1 from public.tapact_notifications
+    where recipient_id = bo and body = 'Player kept a private note in this sentence.'
+  ) then
+    raise exception 'DELETION TEST FAILED: the common name Player was rewritten in unrelated text';
+  end if;
+  if not exists (
+    select 1 from public.tapact_notifications
+    where recipient_id = cy and body = 'Casey kept a shared label.'
+  ) then
+    raise exception 'DELETION TEST FAILED: a shared display name was rewritten';
+  end if;
+  if exists (
+    select 1 from public.tapact_notifications
+    where recipient_id <> ada and position(ada::text in body || dedupe_key) > 0
+  ) then
+    raise exception 'DELETION TEST FAILED: the account id remained in a surviving notice';
+  end if;
+  if not exists (select 1 from public.tapact_duels where id = active_duel and title = 'Active duel') then
+    raise exception 'DELETION TEST FAILED: the shared duel title was removed';
   end if;
 
   perform set_config('request.jwt.claim.sub', bo::text, true);
