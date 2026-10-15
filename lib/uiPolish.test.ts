@@ -124,3 +124,20 @@ describe("Settings summaries", () => {
     expect(push).toContain("Push event choices");
   });
 });
+
+describe("Tab navigation", () => {
+  it("shows the next tab on the same update instead of waiting for an exit", () => {
+    const page = source("app/page.tsx");
+    const mainStart = page.indexOf("<motion.main");
+    const tabStart = page.indexOf("<div key={tab}>", mainStart);
+    const shell = page.slice(mainStart, page.indexOf('tab === "insights"', tabStart));
+    expect(shell).toContain("<div key={tab}>");
+    expect(shell).not.toContain("AnimatePresence");
+    expect(shell).not.toContain('mode="wait"');
+    expect(shell).not.toContain("exit=");
+    expect(page).toContain("window.scrollTo({ top: 0 })");
+    expect(page.indexOf("<CloudSyncProvider")).toBeLessThan(tabStart);
+    expect(page.indexOf("<DuelNotificationProvider")).toBeLessThan(tabStart);
+    expect(page.indexOf("<FocusDock")).toBeGreaterThan(page.indexOf("</motion.main>"));
+  });
+});
