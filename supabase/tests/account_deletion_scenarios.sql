@@ -22,6 +22,7 @@ declare
   dee uuid := '44444444-4444-4444-4444-444444444444';
   eve uuid := '55555555-5555-5555-5555-555555555555';
   fay uuid := '66666666-6666-6666-6666-666666666666';
+  gus uuid := '77777777-7777-7777-7777-777777777777';
   today date := (now() at time zone 'America/New_York')::date;
   started_ms bigint;
   created jsonb;
@@ -34,6 +35,7 @@ declare
   finish_duel uuid;
   worker_duel uuid;
   fay_duel uuid;
+  gus_duel uuid;
   act uuid;
   board jsonb;
   day jsonb;
@@ -52,7 +54,8 @@ begin
     (cy, 'cy@example.test', now(), '{"display_name":"Cy"}'::jsonb),
     (dee, 'dee@example.test', now(), '{"display_name":"Dee"}'::jsonb),
     (eve, 'eve@example.test', now(), '{"display_name":"Eve"}'::jsonb),
-    (fay, 'fay@example.test', now(), '{"display_name":"Fay"}'::jsonb);
+    (fay, 'fay@example.test', now(), '{"display_name":"Fay"}'::jsonb),
+    (gus, 'gus@example.test', now(), '{"display_name":"Gus"}'::jsonb);
 
   select string_agg(a.attname, ',' order by a.attnum) into pk_cols
   from pg_index i
@@ -175,6 +178,16 @@ begin
   fay_duel := (created ->> 'duelId')::uuid;
   token := created ->> 'token';
   perform set_config('request.jwt.claim.sub', fay::text, true);
+  perform public.tapact_accept_duel_invite(token, 'America/New_York');
+
+  perform set_config('request.jwt.claim.sub', gus::text, true);
+  created := public.tapact_create_duel(jsonb_build_object(
+    'title', 'Unprepared delete', 'durationDays', 7, 'startsOn', today, 'timeZone', 'America/New_York',
+    'activities', jsonb_build_array(jsonb_build_object('name', 'Reading', 'targetMinutes', 5, 'trackerActivityId', 'read-gus'))
+  ));
+  gus_duel := (created ->> 'duelId')::uuid;
+  token := created ->> 'token';
+  perform set_config('request.jwt.claim.sub', bo::text, true);
   perform public.tapact_accept_duel_invite(token, 'America/New_York');
 
   insert into public.tapact_activities (user_id, id, name, icon_key, color) values
@@ -521,10 +534,36 @@ begin
     end if;
   end;
 
+  if exists (
+    select 1 from pg_constraint
+    where contype = 'f' and confrelid = 'auth.users'::regclass and confdeltype not in ('c', 'n')
+  ) then
+    raise exception 'DELETION TEST FAILED: an Auth foreign key can still block or restrict deletion';
+  end if;
+
+  delete from auth.users where id = ada;
+  if exists (select 1 from auth.users where id = ada)
+     or exists (select 1 from public.tapact_account_deletion_requests where user_id = ada)
+     or not exists (select 1 from public.tapact_duels where id = active_duel and creator_id is null) then
+    raise exception 'DELETION TEST FAILED: removing the prepared Auth user changed the shared duel';
+  end if;
+
+  -- Auth removal without prepare keeps the duel but does not anonymize or freeze.
+  delete from auth.users where id = gus;
+  if not exists (select 1 from public.tapact_duels where id = gus_duel and creator_id is null and status = 'active')
+     or not exists (
+       select 1 from public.tapact_duel_members
+       where duel_id = gus_duel and user_id is null and display_name = 'Gus' and frozen_score is null
+     )
+     or not exists (select 1 from public.tapact_duel_members where duel_id = gus_duel and user_id = bo and display_name = 'Bo')
+     or exists (select 1 from public.tapact_duel_mappings where duel_id = gus_duel and user_id is null) then
+    raise exception 'DELETION TEST FAILED: unprepared Auth delete did not match the foreign-key result';
+  end if;
+
   -- deletion with no surviving member, after the survivor has been checked
   perform set_config('request.jwt.claim.sub', bo::text, true);
   perform public.tapact_prepare_account_deletion('bo@example.test');
-  if exists (select 1 from public.tapact_duels where id in (active_duel, completed_duel, finish_duel, worker_duel)) then
+  if exists (select 1 from public.tapact_duels where id in (active_duel, completed_duel, finish_duel, worker_duel, gus_duel)) then
     raise exception 'DELETION TEST FAILED: duels remained after the last member deleted';
   end if;
   if not exists (select 1 from public.tapact_duels where id = multi_duel and status = 'active') then
