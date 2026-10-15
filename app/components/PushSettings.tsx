@@ -1,6 +1,8 @@
 "use client";
 
 import { Bell, BellOff } from "lucide-react";
+import { notificationStatusSummary } from "@/lib/settingsSummary";
+import { SettingsDisclosure } from "./SettingsDisclosure";
 import { useCallback, useEffect, useState } from "react";
 import { NOTIFICATION_EVENTS, type NotificationEventType } from "@/lib/duels/notifications";
 import { enableDevicePush, pauseDevicePush, publicVapidKey, releaseDevicePushSubscription } from "@/lib/push/browser";
@@ -8,7 +10,6 @@ import { defaultPushEvents, PUSH_EVENT_LABELS, type PushPreferenceState } from "
 import { describePushAvailability, eventPreferencePatch, permissionHelp, type PushPlatform } from "@/lib/push/support";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuth } from "./AuthProvider";
-import { SectionCard } from "./ui";
 
 type SettingsResponse = {
   pushEnabled?: boolean;
@@ -147,7 +148,11 @@ export function PushSettings({ platform, installed }: { platform: PushPlatform; 
   const showEvents = auth.status === "signed-in" && (prefs.pushEnabled || registered);
 
   return (
-    <SectionCard title="Duel alerts" aside={prefs.pushEnabled ? <Bell className="size-4 text-volt-hi" /> : <BellOff className="size-4 text-text-3" />}>
+    <SettingsDisclosure
+      title="Notifications"
+      summary={notificationStatusSummary(availability.title)}
+      aside={prefs.pushEnabled ? <Bell className="size-4 text-volt-hi" aria-hidden="true" /> : <BellOff className="size-4" aria-hidden="true" />}
+    >
       <div className="space-y-3">
         <p className="text-sm font-semibold text-text-1">{availability.title}</p>
         <p className="text-xs leading-relaxed text-text-2">{availability.detail}</p>
@@ -200,6 +205,6 @@ export function PushSettings({ platform, installed }: { platform: PushPlatform; 
           </ul>
         )}
       </div>
-    </SectionCard>
+    </SettingsDisclosure>
   );
 }

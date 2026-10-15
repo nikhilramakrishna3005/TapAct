@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   AlertTriangle,
   BadgeCheck,
+  ChevronDown,
   Cloud,
   CloudAlert,
   CloudCheck,
@@ -16,7 +17,7 @@ import {
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { getInitials } from "@/lib/auth/account";
 import { DURATION, EASE_OUT } from "@/lib/motion";
 import { summarizeState } from "@/lib/backup";
@@ -78,28 +79,46 @@ function describeStatus(status: SyncStatus, sync: ReturnType<typeof useCloudSync
   }
 }
 
-function CloudSyncCard({ email }: { email: string | null }) {
+function SyncStatusBadge() {
   const sync = useCloudSync();
   const style = STATUS_STYLE[sync.status];
+  return (
+    <span
+      role="status"
+      aria-live="polite"
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em] ${style.tone}`}
+    >
+      {style.icon}
+      {style.label}
+    </span>
+  );
+}
+
+function AccountAttention() {
+  const sync = useCloudSync();
+  const needsDecision = sync.decision?.kind === "guest-data" || sync.decision?.kind === "other-account";
+  if (!needsDecision && !sync.errorMessage && sync.status !== "error" && sync.status !== "action-needed") return null;
+  return (
+    <div className="mt-3">
+      {(sync.status === "error" || sync.status === "action-needed") && (
+        <p className="text-[0.72rem] leading-relaxed text-text-2">{describeStatus(sync.status, sync, null)}</p>
+      )}
+      {sync.errorMessage && <p className="mt-1.5 text-[0.72rem] leading-relaxed text-danger">{sync.errorMessage}</p>}
+      {needsDecision && (
+        <button type="button" onClick={sync.openPrompt} className="btn btn-electric mt-3 h-11 w-full">
+          Review this device&apos;s data
+        </button>
+      )}
+    </div>
+  );
+}
+
+function CloudSyncDetails({ email }: { email: string | null }) {
+  const sync = useCloudSync();
   const needsDecision = sync.decision?.kind === "guest-data" || sync.decision?.kind === "other-account";
   return (
-    <div className="mt-3 rounded-[var(--radius-md)] border border-line bg-ink-0 px-3 py-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="flex items-center gap-2 text-xs font-semibold text-text-1">
-          <Cloud className="size-3.5 text-text-3" aria-hidden="true" />
-          Cloud sync
-        </p>
-        <span
-          role="status"
-          aria-live="polite"
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em] ${style.tone}`}
-        >
-          {style.icon}
-          {style.label}
-        </span>
-      </div>
-      <p className="mt-2 text-[0.72rem] leading-relaxed text-text-3">{describeStatus(sync.status, sync, email)}</p>
-      {sync.errorMessage && <p className="mt-1.5 text-[0.72rem] leading-relaxed text-danger">{sync.errorMessage}</p>}
+    <div className="rounded-[var(--radius-md)] border border-line bg-ink-0 px-3 py-3">
+      <p className="text-[0.72rem] leading-relaxed text-text-3">{describeStatus(sync.status, sync, email)}</p>
       <dl className="mt-2.5 space-y-1.5 border-t border-line pt-2.5">
         <div className="flex items-center justify-between gap-3 text-[0.72rem]">
           <dt className="text-text-3">Last synced</dt>
@@ -110,11 +129,7 @@ function CloudSyncCard({ email }: { email: string | null }) {
           <dd className="truncate font-medium text-text-1">{email ?? "This account"}</dd>
         </div>
       </dl>
-      {needsDecision ? (
-        <button type="button" onClick={sync.openPrompt} className="btn btn-electric mt-3 h-11 w-full">
-          Review this device&apos;s data
-        </button>
-      ) : (
+      {!needsDecision && (
         <button
           type="button"
           onClick={sync.syncNow}
@@ -202,6 +217,61 @@ function SignedOutDataNote() {
       <b className="font-semibold text-text-1 [overflow-wrap:anywhere]">{sync.dataOwner.email ?? "your account"}</b>
       &apos;s data. New activity is saved here and syncs when that account signs in again.
     </p>
+  );
+}
+
+function ManageAccount({
+  email,
+  signingOut,
+  onSignOut,
+}: {
+  email: string | null;
+  signingOut: boolean;
+  onSignOut: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const reactId = useId();
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const buttonId = `manage-account-${reactId}`;
+  const panelId = `manage-account-panel-${reactId}`;
+
+  return (
+    <div className="mt-2">
+      <button
+        ref={buttonRef}
+        id={buttonId}
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => {
+          if (open && panelRef.current?.contains(document.activeElement)) buttonRef.current?.focus();
+          setOpen((current) => !current);
+        }}
+        className="flex min-h-11 w-full items-center justify-between gap-3 text-left"
+      >
+        <span className="text-sm font-semibold text-text-1">Manage account</span>
+        <ChevronDown aria-hidden="true" className={`size-4 text-text-3 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div ref={panelRef} id={panelId} role="region" aria-labelledby={buttonId}>
+          <CloudSyncDetails email={email} />
+          <button
+            type="button"
+            onClick={onSignOut}
+            disabled={signingOut}
+            aria-busy={signingOut}
+            className="btn btn-ghost mt-3 h-12 w-full"
+          >
+            <LogOut className="size-4" />
+            {signingOut ? "Signing out…" : "Sign out"}
+          </button>
+          <p className="mt-2 text-center text-[0.68rem] text-text-3">
+            Signing out keeps all activity on this device. Unsynced changes upload when you sign back in.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -297,20 +367,15 @@ export function AccountSection() {
                   )}
                 </div>
               </div>
-              <CloudSyncCard email={account.email} />
-              <button
-                type="button"
-                onClick={handleSignOut}
-                disabled={signingOut}
-                aria-busy={signingOut}
-                className="btn btn-ghost mt-3 h-12 w-full"
-              >
-                <LogOut className="size-4" />
-                {signingOut ? "Signing out…" : "Sign out"}
-              </button>
-              <p className="mt-2 text-center text-[0.68rem] text-text-3">
-                Signing out keeps all activity on this device. Unsynced changes upload when you sign back in.
-              </p>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <p className="flex items-center gap-2 text-xs font-semibold text-text-1">
+                  <Cloud className="size-3.5 text-text-3" aria-hidden="true" />
+                  Cloud sync
+                </p>
+                <SyncStatusBadge />
+              </div>
+              <AccountAttention />
+              <ManageAccount email={account.email} signingOut={signingOut} onSignOut={() => void handleSignOut()} />
             </>
           )}
         </motion.div>

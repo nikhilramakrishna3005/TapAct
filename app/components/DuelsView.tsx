@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { MoreHorizontal, Swords } from "lucide-react";
+import { MoreHorizontal, RefreshCw, Swords } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DURATION, EASE_OUT } from "@/lib/motion";
 import { duelError, duelsApi, type DuelBoard, type DuelListItem } from "@/lib/duels/api";
@@ -75,7 +75,9 @@ export function DuelsView({
   const [characterReady, setCharacterReady] = useState(false);
   const [skippedCharacter, setSkippedCharacter] = useState(false);
   const [picker, setPicker] = useState<"choose" | "change" | "customize" | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const actingLock = useRef(false);
+  const refreshLock = useRef(false);
   const opened = useRef(false);
   const offeredCharacter = useRef(false);
   const boardsRef = useRef(new Map<string, DuelBoard>());
@@ -292,12 +294,18 @@ export function DuelsView({
   }, [auth.status, loadBoard, selected]);
 
   const refresh = async () => {
+    if (refreshLock.current) return;
+    refreshLock.current = true;
+    setRefreshing(true);
     setError(null);
     try {
       await loadList({ history: false });
       if (selectedRef.current) await loadBoard(selectedRef.current);
     } catch (caught) {
       setError(duelError(caught));
+    } finally {
+      refreshLock.current = false;
+      setRefreshing(false);
     }
   };
 
@@ -401,7 +409,23 @@ export function DuelsView({
 
   return (
     <>
-      <ScreenHeader eyebrow="Duels" title="The arena." compact />
+      <ScreenHeader
+        eyebrow="Duels"
+        title="The arena."
+        compact
+        actions={
+          <button
+            type="button"
+            aria-label="Refresh duels"
+            aria-busy={refreshing}
+            disabled={refreshing}
+            onClick={() => void refresh()}
+            className="grid size-11 place-items-center rounded-full text-text-2 transition-colors hover:text-text-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt-hi disabled:opacity-60"
+          >
+            <RefreshCw className={`size-4 ${refreshing ? "busy-spin-icon" : ""}`} aria-hidden="true" />
+          </button>
+        }
+      />
 
       {characterReady && (
         <div className="mt-2 flex items-center justify-between gap-2">
@@ -544,8 +568,6 @@ export function DuelsView({
           </ul>
         )}
       </details>
-
-      <button type="button" onClick={() => void refresh()} className="mt-4 min-h-11 text-sm font-medium text-text-3">Refresh</button>
 
       {picker && (
         <ChooseCharacter
