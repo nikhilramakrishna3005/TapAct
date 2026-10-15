@@ -52,8 +52,13 @@ describe("privacy and terms copy", () => {
     expect(privacy).toContain("Share when I'm tracking a duel activity");
     expect(privacy).toContain("stores only a hash of that token");
     expect(privacy).toContain("does not include your activity list or timer history");
+    expect(privacy).toContain("individual publisher");
+    expect(privacy).toContain("Supabase Database Webhook");
+    expect(privacy).toContain("scheduled Vercel cron");
+    expect(privacy).toContain("not guaranteed to be immediate");
     expect(privacy).toContain("TapAct does not yet offer account deletion");
     expect(privacy).toContain("Signing out is not deletion");
+    expect(privacy).not.toContain("nikhilramakrishna30@gmail.com");
     expect(privacy).toContain("Supabase");
     expect(privacy).toContain("Vercel");
     expect(privacy).toContain(UNPUBLISHED_SUPPORT);

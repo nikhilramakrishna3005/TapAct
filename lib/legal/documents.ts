@@ -72,7 +72,7 @@ export function privacySections(email: string | null = readSupportEmail()): Lega
       paragraphs: [
         "Push is off until you allow it. TapAct then stores this device's push subscription — the endpoint address and the keys the browser provides — with your account in Supabase. You can pause notifications, turn off individual duel events, or disable this device.",
         "A notice's delivered text is a short title, a short body, and a link back to that duel. It does not include your activity list or timer history. The browser's push service (Apple, Google, Mozilla, or Microsoft, depending on the browser) receives that text in order to deliver it. TapAct accepts subscription endpoints only for those providers' push hosts.",
-        "On iPhone and iPad, Web Push works in the installed Home Screen app, not in a Safari tab. Delivery is not immediate. Notices wait until TapAct's scheduled sender runs, and a notice can be delayed.",
+        "On iPhone and iPad, Web Push works in the installed Home Screen app, not in a Safari tab. When a duel notice is created, Supabase can start delivery by calling TapAct through a Database Webhook. A scheduled Vercel cron runs as the fallback. Delivery is not guaranteed to be immediate.",
         "Signing out asks this device to drop its subscription. The account's other devices are unchanged until they are disabled or the account is removed.",
       ],
     },
@@ -89,7 +89,7 @@ export function privacySections(email: string | null = readSupportEmail()): Lega
       id: "processors",
       heading: "Infrastructure",
       paragraphs: [
-        "TapAct uses Supabase for accounts, the Postgres database, and row-level access rules. The website and the scheduled notification sender run on Vercel. When push is enabled, the browser's push service delivers the notice.",
+        "TapAct uses Supabase for accounts, the Postgres database, and row-level access rules. The website runs on Vercel. Push delivery is event-triggered through a Supabase Database Webhook, with a scheduled Vercel cron as the fallback. When push is enabled, the browser's push service delivers the notice.",
         "The app does not include an advertising network or a product-analytics or crash-reporting service. Connections to TapAct and Supabase use HTTPS.",
       ],
     },
