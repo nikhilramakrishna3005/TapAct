@@ -39,7 +39,9 @@ import { NotificationScreenHeader as ScreenHeader } from "./duels/NotificationIn
 import { useMotionPrefs } from "./MotionPrefs";
 import { applyDocumentTheme } from "./ThemeSync";
 import { resolveAppearanceChoice, resolveTheme, saveAppearance, type AppearanceChoice } from "@/lib/theme";
-import { formatSummaryDuration, SectionCard, Segmented } from "./ui";
+import { aboutSummary, appearanceSummary, dataBackupSummary, installSummary, motionSummary } from "@/lib/settingsSummary";
+import { SettingsDisclosure } from "./SettingsDisclosure";
+import { formatSummaryDuration, Segmented } from "./ui";
 
 type Feedback = { tone: "success" | "error"; message: string };
 
@@ -115,6 +117,7 @@ export function SettingsView({
   const [motionSaveFailed, setMotionSaveFailed] = useState(false);
   const [appearance, setAppearance] = useState<AppearanceChoice>("dark");
   const [appearanceSaveFailed, setAppearanceSaveFailed] = useState(false);
+  const [dataOpen, setDataOpen] = useState(false);
 
   useLayoutEffect(() => {
     try {
@@ -203,6 +206,7 @@ export function SettingsView({
       }
       setFeedback(null);
       setPendingImport({ fileName: file.name, state: result.state, summary: result.summary });
+      setDataOpen(true);
     } catch {
       setFeedback({ tone: "error", message: "Couldn't read that file." });
     }
@@ -282,7 +286,7 @@ export function SettingsView({
 
       <PushSettings platform={platform} installed={installed} />
 
-      <SectionCard title="Appearance" aside={<Sun className="size-4 text-text-3" />}>
+      <SettingsDisclosure title="Appearance" summary={appearanceSummary(appearance)} aside={<Sun className="size-4" aria-hidden="true" />}>
         <Segmented
           label="Appearance"
           layoutId="settings-appearance"
@@ -318,9 +322,9 @@ export function SettingsView({
             Applied for this session, but browser storage couldn't save it.
           </p>
         )}
-      </SectionCard>
+      </SettingsDisclosure>
 
-      <SectionCard title="Motion" aside={<Sparkles className="size-4 text-text-3" />}>
+      <SettingsDisclosure title="Motion" summary={motionSummary(prefs.motionIntensity)} aside={<Sparkles className="size-4" aria-hidden="true" />}>
         <div className="space-y-4">
           <div>
             <p className="mb-2 text-xs text-text-2">Animation intensity</p>
@@ -369,9 +373,9 @@ export function SettingsView({
             </p>
           )}
         </div>
-      </SectionCard>
+      </SettingsDisclosure>
 
-      <SectionCard title="Install TapAct" aside={<Smartphone className="size-4 text-text-3" />}>
+      <SettingsDisclosure title="Install TapAct" summary={installSummary(installed)} aside={<Smartphone className="size-4" aria-hidden="true" />}>
         {installed ? (
           <p className="flex items-center gap-2 text-sm text-text-2">
             <CheckCircle2 className="size-4 text-mint" />
@@ -420,9 +424,15 @@ export function SettingsView({
             )}
           </div>
         )}
-      </SectionCard>
+      </SettingsDisclosure>
 
-      <SectionCard title="Storage" aside={<HardDrive className="size-4 text-text-3" />}>
+      <SettingsDisclosure
+        title="Data & Backup"
+        summary={dataBackupSummary(storageStatus, cloudBacked)}
+        aside={<HardDrive className="size-4" aria-hidden="true" />}
+        open={dataOpen}
+        onOpenChange={setDataOpen}
+      >
         <dl className="space-y-2">
           <Row label="Storage mode" value={cloudBacked ? "This device + cloud sync" : "On this device (local storage)"} />
           <Row
@@ -446,10 +456,7 @@ export function SettingsView({
             ? "Every change is saved on this device first, then synced to your account. Signing out keeps this copy."
             : "Your records stay in this browser unless you sign in and choose to sync, or export them. Clearing site data removes them, so keep a backup."}
         </p>
-      </SectionCard>
-
-      <SectionCard title="Backup & restore">
-        <div className="flex gap-2">
+        <div className="mt-4 flex gap-2">
           <button type="button" onClick={handleExport} className={BUTTON_CLASS}>
             <Download className="size-4" />
             Export data
@@ -531,9 +538,9 @@ export function SettingsView({
             </motion.div>
           )}
         </AnimatePresence>
-      </SectionCard>
+      </SettingsDisclosure>
 
-      <SectionCard title="About" aside={<Info className="size-4 text-text-3" />}>
+      <SettingsDisclosure title="About" summary={aboutSummary(packageJson.version)} aside={<Info className="size-4" aria-hidden="true" />}>
         <dl className="space-y-2">
           <Row label="App" value={`TapAct ${packageJson.version}`} />
           <Row label="Data format" value={`Tracker schema v${tracker.schemaVersion}`} />
@@ -547,7 +554,7 @@ export function SettingsView({
             }
           />
         </dl>
-      </SectionCard>
+      </SettingsDisclosure>
     </>
   );
 }

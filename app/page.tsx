@@ -46,7 +46,8 @@ import { ActivityCard } from "./components/ActivityCard";
 import { AuthProvider, useAuth } from "./components/AuthProvider";
 import { CloudSyncProvider } from "./components/CloudSync";
 import { DuelsView } from "./components/DuelsView";
-import { DuelNotificationProvider, NotificationBellButton } from "./components/duels/NotificationInbox";
+import { DuelNotificationProvider } from "./components/duels/NotificationInbox";
+import { formatTodayHeaderDate } from "@/lib/todayLabel";
 import { duelsApi } from "@/lib/duels/api";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { type AppTab, FocusDock } from "./components/FocusDock";
@@ -287,10 +288,6 @@ function MilestoneToast({ milestone, expressive }: { milestone: Milestone; expre
       </div>
     </motion.div>
   );
-}
-
-function formatTodayLabel(ms: number): string {
-  return new Date(ms).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 }
 
 export default function Page() {
@@ -693,14 +690,13 @@ function Home() {
               />
             ) : (
               <>
-                <header className="flex h-12 items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <header className="flex h-12 items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
                     <OrbitMark size={26} spin={activeActivity !== null} />
-                    <span className="text-[1.05rem] font-semibold tracking-[-0.03em]">TapAct</span>
+                    <span className="shrink-0 text-[1.05rem] font-semibold tracking-[-0.03em]">TapAct</span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <NotificationBellButton />
-                    <p className="text-xs font-medium text-text-3">{formatTodayLabel(nowMs)}</p>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <p className="whitespace-nowrap text-xs font-medium text-text-3">{formatTodayHeaderDate(nowMs)}</p>
                     {auth.status !== "unavailable" && (
                       <button
                         type="button"

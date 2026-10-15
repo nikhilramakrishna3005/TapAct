@@ -60,14 +60,26 @@ export function NotificationScreenHeader({
   title,
   children,
   compact = false,
+  actions,
 }: {
   eyebrow: string;
   title: string;
   children?: React.ReactNode;
   compact?: boolean;
+  actions?: React.ReactNode;
 }) {
   return (
-    <ScreenHeader eyebrow={eyebrow} title={title} compact={compact} trailing={<NotificationBellButton />}>
+    <ScreenHeader
+      eyebrow={eyebrow}
+      title={title}
+      compact={compact}
+      trailing={
+        <div className="flex shrink-0 items-center">
+          {actions}
+          <NotificationBellButton />
+        </div>
+      }
+    >
       {children}
     </ScreenHeader>
   );

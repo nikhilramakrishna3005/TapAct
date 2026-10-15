@@ -79,7 +79,7 @@ export function InsightsView({ tracker, todayKey }: { tracker: TrackerState; tod
   return (
     <>
       <ScreenHeader eyebrow="Insights" title="See where your time goes.">
-        <div className="mt-6 flex items-end justify-between gap-4">
+        <div className="mt-3 flex items-end justify-between gap-4">
           <div>
             <p className="eyebrow">This week</p>
             <p className="numeric mt-2 text-[2.9rem] font-semibold leading-none text-text-1">
