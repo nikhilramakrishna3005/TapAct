@@ -22,6 +22,7 @@ import { getInitials } from "@/lib/auth/account";
 import { DURATION, EASE_OUT } from "@/lib/motion";
 import { summarizeState } from "@/lib/backup";
 import { useAuth } from "./AuthProvider";
+import { LegalLinks } from "./legal/LegalLinks";
 import { type SyncStatus, useCloudSync } from "./CloudSync";
 import { downloadBackup } from "./downloadBackup";
 import { formatSummaryDuration, SectionCard } from "./ui";
@@ -380,6 +381,7 @@ export function AccountSection() {
           )}
         </motion.div>
       </AnimatePresence>
+      <LegalLinks className="mt-3" />
     </SectionCard>
   );
 }
