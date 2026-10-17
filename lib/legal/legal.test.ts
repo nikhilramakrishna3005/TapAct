@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { privacySections, termsSections, UNPUBLISHED_SUPPORT } from "./documents";
-import { parseSupportEmail, readSupportEmail, SUPPORT_EMAIL_ENV } from "./support";
+import { parseSupportEmail, readSupportEmail, SUPPORT_EMAIL_ENV, supportMailto } from "./support";
 
 function source(path: string): string {
   return readFileSync(resolve(process.cwd(), path), "utf8");
@@ -39,6 +39,16 @@ describe("support contact", () => {
     expect(readSupportEmail()).toBeNull();
     process.env[SUPPORT_EMAIL_ENV] = "maintainer@tapact.dev";
     expect(readSupportEmail()).toBe("maintainer@tapact.dev");
+  });
+
+  it("builds a mailto URL only for a published address", () => {
+    expect(supportMailto(undefined)).toBeNull();
+    expect(supportMailto("not-an-email")).toBeNull();
+    expect(supportMailto("example@example.com")).toBeNull();
+    expect(supportMailto("person+help@tapact.dev")).toBe("mailto:person%2Bhelp%40tapact.dev");
+    const href = supportMailto("  Maintainer@TapAct.dev ");
+    expect(href).toBe("mailto:maintainer%40tapact.dev");
+    expect(href && new URL(href).protocol).toBe("mailto:");
   });
 });
 
@@ -110,7 +120,8 @@ describe("legal routes and entry points", () => {
     expect(document).toContain('href="/"');
     expect(document).toContain("safe-area-inset-bottom");
     expect(document).toContain("safe-area-inset-top");
-    expect(document).toContain("mailto:");
+    expect(document).toContain("supportMailto");
+    expect(document).not.toContain("mailto:${");
     expect(document).toContain("<h1");
   });
 
@@ -127,7 +138,9 @@ describe("legal routes and entry points", () => {
     expect(about).toContain("<h3");
     expect(about).toContain("Support");
     expect(about).toContain("A support address has not been published yet.");
-    expect(about).toContain("mailto:");
+    expect(about).toContain("href={supportHref}");
+    expect(about).not.toContain("mailto:");
+    expect(settings).toContain("supportMailto(supportEmail)");
     expect(about).toContain("<LegalLinks");
     const links = source("app/components/legal/LegalLinks.tsx");
     expect(links).toContain('href="/privacy"');
@@ -136,5 +149,23 @@ describe("legal routes and entry points", () => {
     const env = source(".env.example");
     expect(env).toContain("NEXT_PUBLIC_SUPPORT_EMAIL");
     expect(env).not.toContain("example@example.com");
+    expect(source("lib/legal/support.ts")).toContain("process.env.NEXT_PUBLIC_SUPPORT_EMAIL");
+    expect(source("app/privacy/page.tsx")).toContain("privacySections()");
+    expect(source("app/terms/page.tsx")).toContain("termsSections()");
+  });
+
+  it("does not claim that every activity stays on the device", () => {
+    const manifest = source("app/manifest.ts");
+    const onboarding = source("app/components/Onboarding.tsx");
+    expect(manifest).not.toContain("Your data stays on this device");
+    expect(onboarding).not.toContain("Your data stays on this device");
+    expect(manifest).toContain("Activity tracking works on this device");
+    expect(manifest).toContain("Signed-in users can sync that data to Supabase");
+    expect(onboarding).toContain("Activity tracking works on this");
+    expect(onboarding).toContain("signed-in users can sync that data to Supabase");
+    const privacy = prose(privacySections(null));
+    expect(privacy).toContain("stored in this browser first");
+    expect(privacy).toContain("Guest history is not uploaded");
+    expect(privacy).toContain("Cloud sync is off until you have an account");
   });
 });

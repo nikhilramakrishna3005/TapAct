@@ -19,3 +19,16 @@ export function parseSupportEmail(raw: string | undefined | null): string | null
 export function readSupportEmail(): string | null {
   return parseSupportEmail(process.env.NEXT_PUBLIC_SUPPORT_EMAIL);
 }
+
+/** A mailto URL for a published support address, or null when none is configured. */
+export function supportMailto(raw: string | null | undefined): string | null {
+  const email = parseSupportEmail(raw);
+  if (!email) return null;
+  const href = `mailto:${encodeURIComponent(email)}`;
+  try {
+    if (new URL(href).protocol !== "mailto:") return null;
+  } catch {
+    return null;
+  }
+  return href;
+}

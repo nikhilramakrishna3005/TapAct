@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect } from "react";
+import { useModalDialog } from "@/lib/dialogFocus";
 import { DURATION, EASE_OUT, SPRING_SHEET, SPRING_SNAPPY } from "@/lib/motion";
 import { MS_PER_MINUTE, type Activity, type ActivityIconName } from "@/lib/tracker";
 import { OrbitMark } from "./Orbit";
@@ -193,16 +194,12 @@ export function Sheet({
   children: React.ReactNode;
   layer?: "base" | "nested";
 }) {
+  const dialogRef = useModalDialog(onClose);
   useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", handleKey);
     return () => {
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", handleKey);
     };
   }, [onClose]);
 
@@ -216,9 +213,11 @@ export function Sheet({
       onClick={onClose}
     >
       <motion.section
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={label}
+        tabIndex={-1}
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
         exit={{ y: "100%" }}

@@ -39,7 +39,7 @@ import { NotificationScreenHeader as ScreenHeader } from "./duels/NotificationIn
 import { useMotionPrefs } from "./MotionPrefs";
 import { applyDocumentTheme } from "./ThemeSync";
 import { resolveAppearanceChoice, resolveTheme, saveAppearance, type AppearanceChoice } from "@/lib/theme";
-import { readSupportEmail } from "@/lib/legal/support";
+import { readSupportEmail, supportMailto } from "@/lib/legal/support";
 import { aboutSummary, appearanceSummary, dataBackupSummary, installSummary, motionSummary } from "@/lib/settingsSummary";
 import { LegalLinks } from "./legal/LegalLinks";
 import { SettingsDisclosure } from "./SettingsDisclosure";
@@ -116,6 +116,7 @@ export function SettingsView({
   const { prefs, systemReduced, reduced, setPreferences } = useMotionPrefs();
   const sync = useCloudSync();
   const supportEmail = readSupportEmail();
+  const supportHref = supportMailto(supportEmail);
   const cloudBacked = sync.status !== "signed-out" && sync.status !== "unavailable" && sync.decision?.kind === "in-sync";
   const [motionSaveFailed, setMotionSaveFailed] = useState(false);
   const [appearance, setAppearance] = useState<AppearanceChoice>("dark");
@@ -559,9 +560,9 @@ export function SettingsView({
         </dl>
         <div className="mt-3 border-t border-line pt-3">
           <h3 className="text-xs text-text-3">Support</h3>
-          {supportEmail ? (
+          {supportEmail && supportHref ? (
             <a
-              href={`mailto:${supportEmail}`}
+              href={supportHref}
               className="inline-flex min-h-11 items-center text-sm font-medium text-volt-hi underline decoration-volt/40 underline-offset-4 [overflow-wrap:anywhere]"
             >
               {supportEmail}

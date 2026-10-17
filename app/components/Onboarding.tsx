@@ -338,7 +338,8 @@ export function Onboarding({ onFinish }: { onFinish: (starters: StarterActivity[
                   className="mx-auto mt-3 max-w-[280px] text-[0.95rem] leading-relaxed text-text-2"
                   style={hiddenStyle(entrancePlaying)}
                 >
-                  Your day, in orbit. Track anything you do with a single tap.
+                  Your day, in orbit. Track anything you do with a single tap. Activity tracking works on this
+                  device, and signed-in users can sync that data to Supabase.
                 </p>
               </div>
             )}
