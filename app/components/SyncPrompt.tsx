@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { AlertTriangle, CloudUpload, Download, HardDrive, ShieldCheck, X } from "lucide-react";
 import { useState } from "react";
 import { summarizeState } from "@/lib/backup";
+import { useModalDialog } from "@/lib/dialogFocus";
 import { DURATION, SPRING_SHEET } from "@/lib/motion";
 import type { OwnershipDecision, SyncOwner } from "@/lib/sync/state";
 import type { TrackerState } from "@/lib/tracker";
@@ -38,6 +39,7 @@ export function SyncPrompt({
   const isOtherAccount = decision.kind === "other-account";
   const ownerLabel = isOtherAccount ? (decision.ownerEmail ?? "another account") : null;
   const titleId = "sync-prompt-title";
+  const dialogRef = useModalDialog(onClose);
 
   return (
     <motion.div
@@ -48,9 +50,11 @@ export function SyncPrompt({
       transition={{ duration: DURATION.quick }}
     >
       <motion.section
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        tabIndex={-1}
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
         exit={{ y: "100%" }}

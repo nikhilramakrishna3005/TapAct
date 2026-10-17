@@ -1,9 +1,28 @@
 import Link from "next/link";
+import { Fragment } from "react";
 import type { LegalSection } from "@/lib/legal/documents";
 import { LEGAL_UPDATED } from "@/lib/legal/documents";
-import { readSupportEmail } from "@/lib/legal/support";
+import { readSupportEmail, supportMailto } from "@/lib/legal/support";
 import { OrbitMark } from "../Orbit";
 import { LegalLinks } from "./LegalLinks";
+
+function ContactText({ text, email, href }: { text: string; email: string | null; href: string | null }) {
+  if (!email || !href || !text.includes(email)) return text;
+  const parts = text.split(email);
+  return parts.map((part, index) => (
+    <Fragment key={`${index}-${part}`}>
+      {part}
+      {index < parts.length - 1 ? (
+        <a
+          href={href}
+          className="font-medium text-volt-hi underline decoration-volt/40 underline-offset-4 [overflow-wrap:anywhere]"
+        >
+          {email}
+        </a>
+      ) : null}
+    </Fragment>
+  ));
+}
 
 export function LegalDocument({
   title,
@@ -15,6 +34,7 @@ export function LegalDocument({
   sections: LegalSection[];
 }) {
   const email = readSupportEmail();
+  const href = supportMailto(email);
   return (
     <div className="min-h-[100dvh] bg-background text-text-1">
       <div className="mx-auto flex w-full max-w-[40rem] flex-col px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))]">
@@ -43,19 +63,19 @@ export function LegalDocument({
                 </h2>
                 {section.paragraphs.map((paragraph) => (
                   <p key={paragraph} className="text-sm leading-relaxed text-text-2">
-                    {paragraph}
+                    <ContactText text={paragraph} email={email} href={href} />
                   </p>
                 ))}
               </section>
             ))}
           </div>
           <div className="mt-10 border-t border-line pt-4">
-            {email ? (
+            {email && href ? (
               <>
                 <h2 className="text-base font-semibold">Support</h2>
                 <p className="mt-2 text-sm leading-relaxed text-text-2">
                   <a
-                    href={`mailto:${email}`}
+                    href={href}
                     className="inline-flex min-h-11 items-center font-medium text-volt-hi underline decoration-volt/40 underline-offset-4 [overflow-wrap:anywhere]"
                   >
                     {email}

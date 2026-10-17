@@ -7,7 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     name: "TapAct — Activity Tracker",
     short_name: "TapAct",
-    description: "Track everyday activities with one tap. Your data stays on this device.",
+    description:
+      "Track everyday activities with one tap. Activity tracking works on this device. Signed-in users can sync that data to Supabase.",
     start_url: "/",
     scope: "/",
     display: "standalone",
