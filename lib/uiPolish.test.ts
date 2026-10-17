@@ -125,6 +125,39 @@ describe("Settings summaries", () => {
   });
 });
 
+describe("Installed app safe area", () => {
+  it("covers the screen and keeps the existing inset padding", () => {
+    const layout = source("app/layout.tsx");
+    expect(layout).toContain('viewportFit: "cover"');
+    expect(layout).toContain('width: "device-width"');
+    expect(layout).toContain("initialScale: 1");
+    expect(layout).toContain('title: "TapAct"');
+    expect(layout).toContain('"apple-mobile-web-app-capable": "yes"');
+    expect(layout).toContain("/pwa-icons/apple-touch-icon.png");
+    expect(layout).toContain('sizes: "180x180"');
+    expect(layout).not.toContain("statusBarStyle");
+
+    const dock = source("app/components/FocusDock.tsx");
+    expect(dock).toContain("bottom-[calc(0.7rem+env(safe-area-inset-bottom))]");
+    expect(dock).toContain("layoutId=\"focus-light\"");
+
+    const page = source("app/page.tsx");
+    expect(page).toContain("pb-[calc(124px+env(safe-area-inset-bottom))]");
+    expect(page).toContain("pt-[calc(0.75rem+env(safe-area-inset-top))]");
+    expect(page).toContain("top-[calc(0.75rem+env(safe-area-inset-top))]");
+
+    const sheet = source("app/components/ui.tsx");
+    expect(sheet).toContain("pb-[calc(1.25rem+env(safe-area-inset-bottom))]");
+    expect(sheet).toContain("max-h-[92vh]");
+    const prompt = source("app/components/SyncPrompt.tsx");
+    expect(prompt).toContain("pb-[calc(1.25rem+env(safe-area-inset-bottom))]");
+
+    const invite = source("app/components/duels/DuelInvite.tsx");
+    expect(invite).toContain("pb-[calc(2rem+env(safe-area-inset-bottom))]");
+    expect(invite).toContain("pt-[calc(2rem+env(safe-area-inset-top))]");
+  });
+});
+
 describe("Tab navigation", () => {
   it("shows the next tab on the same update instead of waiting for an exit", () => {
     const page = source("app/page.tsx");
