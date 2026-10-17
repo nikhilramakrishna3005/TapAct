@@ -18,10 +18,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useId, useRef, useState } from "react";
+import { deletionOutcome } from "@/lib/account/deletionOutcome";
 import { getInitials } from "@/lib/auth/account";
 import { DURATION, EASE_OUT } from "@/lib/motion";
 import { summarizeState } from "@/lib/backup";
 import { useAuth } from "./AuthProvider";
+import { DeleteAccount } from "./DeleteAccount";
 import { LegalLinks } from "./legal/LegalLinks";
 import { type SyncStatus, useCloudSync } from "./CloudSync";
 import { downloadBackup } from "./downloadBackup";
@@ -202,6 +204,46 @@ function StashList() {
   );
 }
 
+function DeletedAccountNotice({
+  deleted,
+  clearDevice,
+  onCleared,
+}: {
+  deleted: { userId: string; deviceCleaned: boolean };
+  clearDevice: () => { deviceCleaned: boolean };
+  onCleared: (deviceCleaned: boolean) => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const outcome = deletionOutcome({
+    serverDeleted: true,
+    deviceCleaned: deleted.deviceCleaned,
+    signedOut: true,
+    serverMessage: null,
+  });
+  return (
+    <div className="mb-3">
+      <p role="status" className="text-xs leading-relaxed text-text-1">
+        {outcome.title} {outcome.detail}
+      </p>
+      {!deleted.deviceCleaned && (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            setPending(true);
+            const progress = clearDevice();
+            onCleared(progress.deviceCleaned);
+            setPending(false);
+          }}
+          className="btn btn-ghost mt-3 h-11 w-full"
+        >
+          {pending ? "Clearing this device…" : "Clear this device"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function SignedOutDataNote() {
   const sync = useCloudSync();
   if (!sync.dataOwner) {
@@ -223,12 +265,16 @@ function SignedOutDataNote() {
 
 function ManageAccount({
   email,
+  userId,
   signingOut,
   onSignOut,
+  onDeleted,
 }: {
   email: string | null;
+  userId: string;
   signingOut: boolean;
   onSignOut: () => void;
+  onDeleted: (result: { userId: string; deviceCleaned: boolean }) => void;
 }) {
   const [open, setOpen] = useState(false);
   const reactId = useId();
@@ -270,6 +316,7 @@ function ManageAccount({
           <p className="mt-2 text-center text-[0.68rem] text-text-3">
             Signing out keeps all activity on this device. Unsynced changes upload when you sign back in.
           </p>
+          {email !== undefined && userId && <DeleteAccount email={email} userId={userId} onDeleted={onDeleted} />}
         </div>
       )}
     </div>
@@ -279,6 +326,8 @@ function ManageAccount({
 export function AccountSection() {
   const { status, account, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
+  const [deleted, setDeleted] = useState<{ userId: string; deviceCleaned: boolean } | null>(null);
+  const sync = useCloudSync();
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -318,6 +367,13 @@ export function AccountSection() {
 
           {status === "signed-out" && (
             <>
+              {deleted && (
+                <DeletedAccountNotice
+                  deleted={deleted}
+                  onCleared={(deviceCleaned) => setDeleted({ ...deleted, deviceCleaned })}
+                  clearDevice={() => sync.applyLocalDeletion(deleted.userId)}
+                />
+              )}
               <p className="text-xs leading-relaxed text-text-2">
                 You&apos;re using TapAct as a guest. Signing in is optional, and your activity on this device stays
                 exactly where it is.
@@ -376,7 +432,13 @@ export function AccountSection() {
                 <SyncStatusBadge />
               </div>
               <AccountAttention />
-              <ManageAccount email={account.email} signingOut={signingOut} onSignOut={() => void handleSignOut()} />
+              <ManageAccount
+                email={account.email}
+                userId={account.id}
+                signingOut={signingOut}
+                onSignOut={() => void handleSignOut()}
+                onDeleted={setDeleted}
+              />
             </>
           )}
         </motion.div>

@@ -2,7 +2,9 @@
 
 import { AnimatePresence } from "motion/react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import type { TrackerState } from "@/lib/tracker";
+import { cleanupDeletedDevice, type LocalDeletionProgress } from "@/lib/account/deviceCleanup";
+import { DELETION_RECEIPT_KEY, deletionStopsSync, readDeletionReceipt } from "@/lib/account/deletionReceipt";
+import { createDefaultTrackerState, type TrackerState } from "@/lib/tracker";
 import type { TrackerUpdate, WritableStorageLike } from "@/lib/trackerStore";
 import { SYNC_DIRTY_EVENT } from "@/lib/sync/capture";
 import {
@@ -64,6 +66,8 @@ type CloudSyncValue = {
   mergeStash: (stashId: string) => Promise<void>;
   /** Must run before a backup restore replaces account-owned data. */
   beforeRestore: () => void;
+  /** After the server confirms Auth deletion. Stops this account's local sync. */
+  applyLocalDeletion: (userId: string) => LocalDeletionProgress;
   /** Edits, adds or deletes a recorded session (queued offline, synced in the background). */
   rescueSession: (change: SessionChange) => RescueResult;
 };
@@ -133,15 +137,38 @@ export function CloudSyncProvider({
     setStash(loadStash(storage, Date.now()));
   }, []);
 
+  const clearTimer = () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
   useEffect(() => {
     refresh();
     setOnline(navigator.onLine);
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === null || event.key === SYNC_META_KEY || event.key === SYNC_STASH_KEY) refresh();
+      if (
+        event.key !== null &&
+        event.key !== SYNC_META_KEY &&
+        event.key !== SYNC_STASH_KEY &&
+        event.key !== DELETION_RECEIPT_KEY
+      ) {
+        return;
+      }
+      const storage = getStorage();
+      const receipt = readDeletionReceipt(storage);
+      if (receipt?.serverDeleted) {
+        clearTimer();
+        if (receipt.resetTracker) {
+          commit(() => createDefaultTrackerState(Date.now()), { source: "sync" });
+        }
+      }
+      refresh();
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
-  }, [refresh]);
+  }, [commit, refresh]);
 
   const deps = useMemo<SyncDeps | null>(() => {
     const client = getSupabaseBrowserClient();
@@ -155,17 +182,14 @@ export function CloudSyncProvider({
     };
   }, [commit]);
 
-  const clearTimer = () => {
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  };
-
   const perform = useCallback(
     async (action: (deps: SyncDeps, owner: SyncOwner) => Promise<SyncRunResult>): Promise<boolean> => {
       const owner = accountRef.current;
       if (!deps || !owner) return false;
+      if (deletionStopsSync(getStorage(), owner.userId)) {
+        clearTimer();
+        return false;
+      }
       if (!navigator.onLine) {
         setOnline(false);
         return false;
@@ -350,6 +374,19 @@ export function CloudSyncProvider({
     [commit, refresh],
   );
 
+  const applyLocalDeletion = useCallback(
+    (userId: string): LocalDeletionProgress => {
+      clearTimer();
+      const result = cleanupDeletedDevice(getStorage(), userId, Date.now());
+      if (result.resetTracker) {
+        commit(() => createDefaultTrackerState(Date.now()), { source: "sync" });
+      }
+      refresh();
+      return result;
+    },
+    [commit, refresh],
+  );
+
   const closePrompt = useCallback(() => {
     dismissedForRef.current = accountRef.current?.userId ?? null;
     setPromptOpen(false);
@@ -374,9 +411,11 @@ export function CloudSyncProvider({
       mergeStash,
       beforeRestore,
       rescueSession,
+      applyLocalDeletion,
     }),
     [
       account?.userId,
+      applyLocalDeletion,
       beforeRestore,
       rescueSession,
       decision,

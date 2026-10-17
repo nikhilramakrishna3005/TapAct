@@ -1,3 +1,4 @@
+import { accountDeletionEnabled } from "../account/availability";
 import { readSupportEmail } from "./support";
 
 export const LEGAL_UPDATED = "15 October 2026";
@@ -11,12 +12,27 @@ export type LegalSection = {
 export const UNPUBLISHED_SUPPORT =
   "A public support address has not been published yet. TapAct will show an email here after the developer configures one. No sample address is listed in its place.";
 
-export function supportParagraph(email: string | null): string {
+export function supportParagraph(email: string | null, deletionOffered = accountDeletionEnabled()): string {
   if (!email) return UNPUBLISHED_SUPPORT;
-  return `You can contact the developer at ${email}. That address is for product and privacy questions. Writing to it does not delete an account, and TapAct has no in-app tool yet that removes or anonymizes an account from an email request.`;
+  const deletion = deletionOffered
+    ? "Writing to it does not delete an account. Delete the account from Settings → Account."
+    : "Writing to it does not delete an account. Account deletion is not currently offered in the app.";
+  return `You can contact the developer at ${email}. That address is for product and privacy questions. ${deletion}`;
 }
 
-export function privacySections(email: string | null = readSupportEmail()): LegalSection[] {
+export function deletionParagraphs(deletionOffered: boolean): string[] {
+  const request = deletionOffered
+    ? "You delete the account from Settings → Account. You sign in again, type the account email, and confirm that the deletion is permanent. A refreshed session is not a new sign-in. The account is not deleted until sign-in removal succeeds. If that last step fails, sign in again and retry. The retry does not restore the personal data already prepared for deletion. If this browser cannot clear its local copy after the account is deleted, the account is still gone. Clear that leftover copy on this device without signing in again."
+    : "Account deletion is not currently offered on this site. The Settings control stays off until the database update is applied and the full flow has been checked. When it is offered, you will delete the account from Settings → Account after signing in again and typing your email.";
+  return [
+    request,
+    "Deletion removes the sign-in, synced activities and sessions, imported baselines, push subscriptions, notification preferences, the private notification inbox, and the duel character. Signing out is not deletion.",
+    "A shared duel can remain for the other member. The deleted member is shown as Former member. Their score is frozen at deletion, and the time zone saved when they joined stays so the recap can still be calculated. The other member's own history is not deleted, and creator privileges are not transferred.",
+    "A push notification already delivered to a device cannot be recalled. A notice that only says Player, or a sentence that uses the same display name as the other member, can remain because it cannot be attributed safely. Proposal notes and private tracker links are removed. The shared activity names and targets stay.",
+  ];
+}
+
+export function privacySections(email: string | null = readSupportEmail(), deletionOffered = accountDeletionEnabled()): LegalSection[] {
   return [
     {
       id: "who",
@@ -80,8 +96,8 @@ export function privacySections(email: string | null = readSupportEmail()): Lega
       id: "retention",
       heading: "How long data stays, and account deletion",
       paragraphs: [
-        "Local activities stay in this browser until you clear the site's saved data, replace them by importing a backup, or the browser removes stored data. Cloud activities, duel membership, in-app notices, and push subscriptions stay for as long as the account exists.",
-        "TapAct does not yet offer account deletion. There is no control that removes your sign-in, your synced activities and sessions, your push subscriptions, your notification preferences, your private notification history, or your duel membership. Signing out is not deletion. This limitation is scheduled to be addressed in a later update. Until that exists, deleting a sign-in by hand in the database would also be unsafe: removing the person who created a duel would currently remove that shared duel for the other member as well.",
+        "Local activities stay in this browser until you clear the site's saved data, replace them by importing a backup, the account that owns them is deleted on this device, or the browser removes stored data. Cloud activities, duel membership, in-app notices, and push subscriptions stay for as long as the account exists.",
+        ...deletionParagraphs(deletionOffered),
         "Clearing this browser's site data removes the copy on this device only. It does not remove data already synced to the account or already shared with a duel opponent.",
       ],
     },
@@ -113,7 +129,7 @@ export function privacySections(email: string | null = readSupportEmail()): Lega
   ];
 }
 
-export function termsSections(email: string | null = readSupportEmail()): LegalSection[] {
+export function termsSections(email: string | null = readSupportEmail(), deletionOffered = accountDeletionEnabled()): LegalSection[] {
   return [
     {
       id: "service",
@@ -129,7 +145,9 @@ export function termsSections(email: string | null = readSupportEmail()): LegalS
       paragraphs: [
         "You can use TapAct without an account. If you create one, you need an email address you can access and a password that meets the form's rules. You are responsible for keeping that sign-in to yourself.",
         "Activity history on a device stays on that device until you choose to sync it. Please read the privacy policy for what is stored locally, what an optional backup contains, and what a duel opponent can see.",
-        "Self-serve account deletion is not available yet. Signing out does not close the account or erase cloud data. That gap is described in the privacy policy and is planned for a later update.",
+        deletionOffered
+          ? "You can permanently delete the account from Settings → Account after signing in again and typing your email. Signing out does not delete it. The privacy policy describes what is removed and what a shared duel keeps."
+          : "Account deletion is not currently offered. Signing out does not close the account or erase cloud data. The privacy policy describes what deletion removes and keeps when it is offered.",
       ],
     },
     {
@@ -151,7 +169,7 @@ export function termsSections(email: string | null = readSupportEmail()): LegalS
     {
       id: "contact",
       heading: "Contact",
-      paragraphs: [supportParagraph(email), "The privacy policy is part of these terms. If the two disagree about what data is stored, the privacy policy is the one to follow."],
+      paragraphs: [supportParagraph(email, deletionOffered), "The privacy policy is part of these terms. If the two disagree about what data is stored, the privacy policy is the one to follow."],
     },
   ];
 }

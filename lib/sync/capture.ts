@@ -1,7 +1,8 @@
+import { deletionStopsSync } from "../account/deletionReceipt";
 import type { TrackerState } from "../tracker";
 import type { WritableStorageLike } from "../trackerStore";
 import { runningSegment, sameActivityFields, type SyncActivity, type TimeEntry, toSyncActivity } from "./merge";
-import { addToOutbox, loadSyncMeta, saveSyncMeta, type SyncMeta } from "./state";
+import { addToOutbox, isAccountBlocked, loadSyncMeta, saveSyncMeta, type SyncMeta } from "./state";
 
 export const SYNC_DIRTY_EVENT = "tapact:sync-dirty";
 
@@ -16,7 +17,7 @@ export function recordCommit(
   if (!storage) return false;
   try {
     const meta = loadSyncMeta(storage);
-    if (!meta.owner) return false;
+    if (!meta.owner || deletionStopsSync(storage, meta.owner.userId)) return false;
     const updated = captureCommit(meta, base, next, nowMs, options);
     if (updated === meta) return false;
     saveSyncMeta(storage, updated);
@@ -44,7 +45,7 @@ export function captureCommit(
   nowMs: number,
   options: CaptureOptions,
 ): SyncMeta {
-  if (!meta.owner) {
+  if (!meta.owner || isAccountBlocked(meta, meta.owner.userId)) {
     return meta;
   }
   const entries: TimeEntry[] = [];

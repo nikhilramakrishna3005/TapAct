@@ -1,3 +1,4 @@
+import { DELETION_SEAL_APPLIED_KEY, pendingDeletionSeal, readDeletionReceipt, staleTrackerWrite } from "./account/deletionReceipt";
 import {
   createDefaultTrackerState,
   loadTrackerState,
@@ -23,6 +24,20 @@ export type CommitResult = {
 };
 
 export type TrackerUpdate = (base: TrackerState, nowMs: number) => TrackerState;
+
+type SessionLike = {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+};
+
+function defaultSession(): SessionLike | null {
+  try {
+    if (typeof sessionStorage === "undefined") return null;
+    return sessionStorage;
+  } catch {
+    return null;
+  }
+}
 
 export function classifyStorageError(error: unknown): PersistFailureReason {
   if (error && typeof error === "object") {
@@ -73,8 +88,19 @@ export function syncFromStorage(
   storage: StorageLike | null,
   memory: TrackerState | null,
   nowMs: number,
+  session: SessionLike | null = defaultSession(),
 ): TrackerState {
-  return selectLatestState(memory, readStoredState(storage, nowMs), nowMs);
+  const stored = readStoredState(storage, nowMs);
+  const seal = pendingDeletionSeal(storage, session);
+  if (seal) {
+    try {
+      session?.setItem(DELETION_SEAL_APPLIED_KEY, seal);
+    } catch {
+      // Keep returning the reset tracker even if this tab cannot remember the seal.
+    }
+    return stored ?? createDefaultTrackerState(nowMs);
+  }
+  return selectLatestState(memory, stored, nowMs);
 }
 
 /**
@@ -87,8 +113,10 @@ export function commitTrackerUpdate(
   memory: TrackerState | null,
   update: TrackerUpdate,
   nowMs: number,
+  session: SessionLike | null = defaultSession(),
 ): CommitResult {
-  const base = syncFromStorage(storage, memory, nowMs);
+  const sealAtStart = readDeletionReceipt(storage)?.sealId ?? null;
+  const base = syncFromStorage(storage, memory, nowMs, session);
   const next: TrackerState = { ...update(base, nowMs), revision: base.revision + 1 };
 
   if (!storage) {
@@ -96,6 +124,10 @@ export function commitTrackerUpdate(
   }
 
   try {
+    if (staleTrackerWrite(sealAtStart, readDeletionReceipt(storage)?.sealId ?? null)) {
+      const stored = readStoredState(storage, nowMs) ?? next;
+      return { state: stored, base, persisted: false, failureReason: null };
+    }
     storage.setItem(STORAGE_KEY_V3, serializeTrackerState(next));
     return { state: next, base, persisted: true, failureReason: null };
   } catch (error) {
