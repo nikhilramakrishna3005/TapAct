@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
+import { DAY_ORBIT } from "@/lib/dayOrbitLayout";
 import { EASE_OUT } from "@/lib/motion";
 
 /** The TapAct mark: a tap point at the center and a satellite riding its orbit. */
@@ -28,11 +29,11 @@ export function OrbitMark({ size = 28, spin = false }: { size?: number; spin?: b
 export type OrbitSegment = { id: string; color: string; ms: number };
 export type OrbitSatellite = { id: string; color: string; met: boolean; label: string };
 
-const SIZE = 248;
-const CENTER = SIZE / 2;
-const OUTER_R = 104;
-const OUTER_STROKE = 12;
-const INNER_R = 80;
+const SIZE = DAY_ORBIT.size;
+const CENTER = DAY_ORBIT.center;
+const OUTER_R = DAY_ORBIT.outerR;
+const OUTER_STROKE = DAY_ORBIT.outerStroke;
+const INNER_R = DAY_ORBIT.innerR;
 const SEGMENT_GAP = 0.008;
 
 function pointOnCircle(radius: number, ratio: number) {
