@@ -53,7 +53,7 @@ export function DuelInvite({ token }: { token: string }) {
   };
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-[430px] px-5 py-8 text-text-1">
+    <main className="mx-auto min-h-screen w-full max-w-[430px] px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-[calc(2rem+env(safe-area-inset-top))] text-text-1">
       <div className="flex items-center gap-2">
         <OrbitMark size={18} />
         <p className="eyebrow">Duel invite</p>
