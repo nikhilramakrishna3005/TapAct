@@ -189,6 +189,22 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/*
+ * Dock clearance. The float is the gap when there is no home-indicator inset.
+ * A covered viewport uses the inset instead of stacking it on the float.
+ * The boot script sets data-dock-inset="cleared" when the installed iPhone
+ * visual viewport is already shorter than 100vh by that inset.
+ */
+:root {
+  --dock-float: 0.7rem;
+  --dock-bottom: max(var(--dock-float), env(safe-area-inset-bottom, 0px));
+  --page-bottom-padding: calc(124px - var(--dock-float) + var(--dock-bottom));
+}
+
+html[data-dock-inset="cleared"] {
+  --dock-bottom: var(--dock-float);
+}
+
 /* Static ambient light: one faint violet bloom and an ice wash, never animated. */
 body::before {
   content: "";

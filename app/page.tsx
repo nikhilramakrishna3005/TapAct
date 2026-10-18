@@ -655,7 +655,7 @@ function Home() {
     >
     <div className="min-h-screen text-text-1">
       <motion.main
-        className="mx-auto w-full max-w-[430px] px-5 pb-[calc(124px+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))]"
+        className="mx-auto w-full max-w-[430px] px-5 pb-[var(--page-bottom-padding)] pt-[calc(0.75rem+env(safe-area-inset-top))]"
         initial={false}
         animate={{ opacity: onboarding === "pending" ? 0 : 1 }}
         transition={{ duration: DURATION.instant }}

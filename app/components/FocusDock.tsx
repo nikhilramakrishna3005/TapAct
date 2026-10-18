@@ -1,7 +1,9 @@
 "use client";
 
+import { useLayoutEffect } from "react";
 import { motion } from "motion/react";
 import { CalendarDays, House, LineChart, Settings2, Swords, type LucideIcon } from "lucide-react";
+import { syncInstalledDockInset } from "@/lib/dockInset";
 import { SPRING_SNAPPY } from "@/lib/motion";
 import { useMotionPrefs } from "./MotionPrefs";
 
@@ -24,10 +26,14 @@ export function FocusDock({
 }) {
   const { reduced } = useMotionPrefs();
 
+  useLayoutEffect(() => {
+    syncInstalledDockInset(window);
+  }, []);
+
   return (
     <nav
       aria-label="Primary"
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(0.7rem+env(safe-area-inset-bottom))] z-20"
+      className="pointer-events-none fixed inset-x-0 bottom-[var(--dock-bottom)] z-20"
     >
       <div className="pointer-events-auto mx-auto flex w-[calc(100%-1.5rem)] max-w-[400px] items-stretch rounded-full border border-[var(--dock-line)] bg-[var(--dock)] px-1.5 py-1 shadow-[0_18px_36px_-22px_var(--shadow)]">
         {NAV_ITEMS.map((item) => {
