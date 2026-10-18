@@ -138,11 +138,13 @@ describe("Installed app safe area", () => {
     expect(layout).not.toContain("statusBarStyle");
 
     const dock = source("app/components/FocusDock.tsx");
-    expect(dock).toContain("bottom-[calc(0.7rem+env(safe-area-inset-bottom))]");
+    expect(dock).toContain("bottom-[var(--dock-bottom)]");
+    expect(dock).not.toContain("0.7rem+env(safe-area-inset-bottom)");
     expect(dock).toContain("layoutId=\"focus-light\"");
 
     const page = source("app/page.tsx");
-    expect(page).toContain("pb-[calc(124px+env(safe-area-inset-bottom))]");
+    expect(page).toContain("pb-[var(--page-bottom-padding)]");
+    expect(page).not.toContain("124px+env(safe-area-inset-bottom)");
     expect(page).toContain("pt-[calc(0.75rem+env(safe-area-inset-top))]");
     expect(page).toContain("top-[calc(0.75rem+env(safe-area-inset-top))]");
 

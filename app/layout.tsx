@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { DOCK_INSET_BOOT_SCRIPT } from "@/lib/dockInset";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import { ServiceWorkerRegister } from "./components/ServiceWorkerRegister";
 import { ThemeSync } from "./components/ThemeSync";
@@ -56,6 +57,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <script dangerouslySetInnerHTML={{ __html: DOCK_INSET_BOOT_SCRIPT }} />
         <ThemeSync />
         {children}
         <ServiceWorkerRegister />
