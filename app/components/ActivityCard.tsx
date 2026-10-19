@@ -87,7 +87,7 @@ export function ActivityCard({
           </div>
           <div className="min-w-0">
             <p className="truncate text-[1.05rem] font-semibold tracking-[-0.015em] text-text-1">{activity.name}</p>
-            <p className="truncate text-xs text-text-3">{activity.cue}</p>
+            {activity.cue ? <p className="truncate text-xs text-text-3">{activity.cue}</p> : null}
           </div>
         </div>
 

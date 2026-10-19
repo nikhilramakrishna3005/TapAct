@@ -200,10 +200,7 @@ function normalizeActivity(activity: unknown, fallbackIndex: number): Activity |
   const color =
     typeof activity.color === "string" && isColorHex(activity.color) ? activity.color : DEFAULT_COLOR;
 
-  const cue =
-    typeof activity.cue === "string" && activity.cue.trim().length > 0
-      ? activity.cue.trim().slice(0, 48)
-      : "Custom activity";
+  const cue = typeof activity.cue === "string" ? activity.cue.trim().slice(0, 48) : "";
 
   const archivedAtMs = sanitizeMs(activity.archivedAtMs);
 
@@ -579,7 +576,6 @@ export function updateActivity(
   updates: Partial<Pick<Activity, "name" | "iconKey" | "color" | "goalMinutes" | "cue" | "category">>,
 ): TrackerState {
   const name = updates.name?.trim();
-  const cue = updates.cue?.trim();
 
   return {
     ...state,
@@ -605,10 +601,7 @@ export function updateActivity(
           updates.goalMinutes === null
             ? null
             : sanitizeGoalMinutes(updates.goalMinutes) ?? activity.goalMinutes,
-        cue:
-          typeof cue === "string" && cue.length > 0
-            ? cue.slice(0, 48)
-            : activity.cue,
+        cue: updates.cue === undefined ? activity.cue : updates.cue.trim().slice(0, 48),
         category:
           updates.category === null || isLifeCategoryId(updates.category)
             ? updates.category

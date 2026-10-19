@@ -94,13 +94,21 @@ type Milestone = {
 
 type ActivityDraft = {
   name: string;
+  description: string;
   icon: ActivityIconName;
   color: string;
   goal: string;
   category: LifeCategoryId | null;
 };
 
-const EMPTY_DRAFT: ActivityDraft = { name: "", icon: "briefcase", color: COLOR_OPTIONS[0], goal: "", category: null };
+const EMPTY_DRAFT: ActivityDraft = {
+  name: "",
+  description: "",
+  icon: "briefcase",
+  color: COLOR_OPTIONS[0],
+  goal: "",
+  category: null,
+};
 
 function validateDraft(draft: ActivityDraft): { error: string } | { name: string; goalMinutes: number | null } {
   const name = draft.name.trim();
@@ -125,6 +133,7 @@ function ActivityForm({
   onSubmit,
   onCancel,
   footer,
+  showDescription = false,
 }: {
   draft: ActivityDraft;
   setDraft: (update: (draft: ActivityDraft) => ActivityDraft) => void;
@@ -133,6 +142,7 @@ function ActivityForm({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
   footer?: React.ReactNode;
+  showDescription?: boolean;
 }) {
   const PreviewIcon = ICON_REGISTRY[draft.icon].icon;
   return (
@@ -156,6 +166,19 @@ function ActivityForm({
           />
         </label>
       </div>
+
+      {showDescription && (
+        <label className="block">
+          <span className="eyebrow mb-1.5 block">Description (optional)</span>
+          <input
+            value={draft.description}
+            onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+            placeholder="e.g. Deep work sessions"
+            maxLength={48}
+            className="field"
+          />
+        </label>
+      )}
 
       <div>
         <p className="eyebrow mb-2">Icon</p>
@@ -552,6 +575,7 @@ function Home() {
     setEditActivityId(activity.id);
     setEditDraft({
       name: activity.name,
+      description: activity.cue,
       icon: activity.iconKey,
       color: activity.color,
       goal: activity.goalMinutes ? String(activity.goalMinutes) : "",
@@ -624,6 +648,7 @@ function Home() {
           iconKey: editDraft.icon,
           color: editDraft.color,
           goalMinutes: result.goalMinutes,
+          cue: editDraft.description,
           category: editDraft.category,
         }),
       );
@@ -994,6 +1019,7 @@ function Home() {
               submitLabel="Save changes"
               onSubmit={handleEditActivity}
               onCancel={closeEditSheet}
+              showDescription
               footer={
                 editingActivity && editingActivity.archivedAtMs === null ? (
                   <button
