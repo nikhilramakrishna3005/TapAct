@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { DOCK_INSET_BOOT_SCRIPT } from "@/lib/dockInset";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
@@ -61,6 +62,7 @@ export default function RootLayout({
         <ThemeSync />
         {children}
         <ServiceWorkerRegister />
+        <Analytics />
       </body>
     </html>
   );
