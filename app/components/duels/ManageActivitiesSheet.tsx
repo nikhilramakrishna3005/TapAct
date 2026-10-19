@@ -10,8 +10,8 @@ import {
   replaceActivityDraft,
 } from "@/lib/duels/manage";
 import { describeRuleChanges, type RuleChange } from "@/lib/duels/rules";
-import { activeNameMatches, trackerCommitPersisted } from "@/lib/duels/connect";
-import { addActivity, createActivityId, type TrackerState } from "@/lib/tracker";
+import { planJoinLink, trackerUsedByOtherChallenge } from "@/lib/duels/connect";
+import { type TrackerState } from "@/lib/tracker";
 import type { CommitResult, TrackerUpdate } from "@/lib/trackerStore";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { ConfirmSheet } from "./ConfirmSheet";
@@ -20,14 +20,14 @@ import { Sheet } from "../ui";
 export function ManageActivitiesSheet({
   board,
   tracker,
-  commit,
   busy,
   onAct,
   onClose,
 }: {
   board: DuelBoard;
   tracker: TrackerState;
-  commit: (update: TrackerUpdate) => CommitResult | void;
+  /** Kept so callers can still pass the tracker writer. Managing a duel does not add activities. */
+  commit?: (update: TrackerUpdate) => CommitResult | void;
   busy: boolean;
   onAct: (work: () => Promise<void>, note?: string) => Promise<void>;
   onClose: () => void;
@@ -36,7 +36,8 @@ export function ManageActivitiesSheet({
   const active = board.duel.status === "active" && !board.duel.final && !board.duel.awaitingOpponent;
   const canEdit = board.you.status === "active" && ((pending && board.you.creator !== false) || active);
   const needsApproval = active;
-  const personal = tracker.activities.filter((activity) => activity.archivedAtMs === null);
+  const joinPlan = planJoinLink(tracker.activities);
+  const personal = joinPlan.kind === "choose" ? joinPlan.activities : [];
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editMinutes, setEditMinutes] = useState(20);
@@ -91,32 +92,26 @@ export function ManageActivitiesSheet({
     setDraftTracker(null);
   };
 
-  const createAndAdd = () => {
+  const addSelected = () => {
     const name = draftName.trim();
+    if (!draftTracker) {
+      setError(joinPlan.kind === "empty" ? joinPlan.message : "Choose an activity from Today.");
+      return;
+    }
+    const selected = personal.find((item) => item.id === draftTracker);
+    if (!selected) {
+      setError("Choose an activity from Today.");
+      return;
+    }
     if (name.length < 2) {
-      setError("Name the activity before adding it.");
+      setError("Name the shared activity before adding it.");
       return;
     }
-    if (draftTracker) {
-      addShared(name, draftMinutes, draftTracker);
+    if (trackerUsedByOtherChallenge(board.you.mappings, "", selected.id)) {
+      setError("That Today activity is already linked in this duel.");
       return;
     }
-    const matches = activeNameMatches(personal, name);
-    if (matches.length > 1) {
-      setError("More than one Today activity uses that name. Choose which one to use.");
-      return;
-    }
-    if (matches.length === 1) {
-      addShared(name, draftMinutes, matches[0].id);
-      return;
-    }
-    const id = createActivityId(name);
-    const saved = commit((base) => addActivity(base, { id, name, iconKey: "briefcase", color: "#8E7BFF", goalMinutes: draftMinutes, cue: "Duel activity" }));
-    if (!trackerCommitPersisted(saved)) {
-      setError("Couldn't save the new activity on this device.");
-      return;
-    }
-    addShared(name, draftMinutes, id);
+    addShared(name, draftMinutes, selected.id);
   };
 
   return (
@@ -201,35 +196,43 @@ export function ManageActivitiesSheet({
       {adding && canEdit && !proposal && (
         <div className="mt-4 rounded-[18px] border border-line bg-ink-0 px-3 py-3">
           <p className="text-sm font-semibold text-text-1">Add activity</p>
-          <p className="mt-1 text-xs text-text-3">Pick one of your Today activities or create a new one. One matching name is reused. Several matches need a choice. This will not add it to your friend's Today list.</p>
-          <ul className="mt-2 max-h-40 overflow-y-auto">
-            {personal.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  aria-pressed={draftTracker === item.id}
-                  className={`min-h-11 w-full rounded-xl px-2 text-left text-sm ${draftTracker === item.id ? "bg-volt/15 text-text-1" : "text-text-2 hover:bg-[var(--wash-strong)]"}`}
-                  onClick={() => {
-                    setDraftTracker(item.id);
-                    setDraftName(item.name);
-                    setDraftMinutes(item.goalMinutes ?? 20);
-                    setError(null);
-                  }}
-                >
-                  Use {item.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-2 flex gap-2">
-            <input value={draftName} maxLength={36} placeholder="Shared name" aria-label="New shared activity name" onChange={(event) => setDraftName(event.target.value)} className="field" />
-            <input type="number" min={5} max={240} value={draftMinutes} aria-label="New shared daily minutes" onChange={(event) => setDraftMinutes(Number(event.target.value))} className="field numeric w-24" />
-          </div>
+          {joinPlan.kind === "empty" ? (
+            <p className="mt-2 text-sm leading-relaxed text-text-2">{joinPlan.message}</p>
+          ) : (
+            <>
+              <p className="mt-1 text-xs text-text-3">Pick one of your Today activities. The duel links to that activity and does not add another one to Today.</p>
+              <ul className="mt-2 max-h-40 overflow-y-auto">
+                {personal.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      aria-pressed={draftTracker === item.id}
+                      className={`min-h-11 w-full rounded-xl px-2 text-left text-sm ${draftTracker === item.id ? "bg-volt/15 text-text-1" : "text-text-2 hover:bg-[var(--wash-strong)]"}`}
+                      onClick={() => {
+                        setDraftTracker(item.id);
+                        setDraftName(item.name);
+                        setDraftMinutes(item.goalMinutes ?? 20);
+                        setError(null);
+                      }}
+                    >
+                      Use {item.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-2 flex gap-2">
+                <input value={draftName} maxLength={36} placeholder="Shared name" aria-label="New shared activity name" onChange={(event) => setDraftName(event.target.value)} className="field" />
+                <input type="number" min={5} max={240} value={draftMinutes} aria-label="New shared daily minutes" onChange={(event) => setDraftMinutes(Number(event.target.value))} className="field numeric w-24" />
+              </div>
+            </>
+          )}
           <div className="mt-2 flex gap-2">
             <button type="button" className="btn btn-ghost h-11 flex-1" onClick={() => setAdding(false)}>Cancel</button>
-            <button type="button" disabled={busy} className="btn btn-primary h-11 flex-1" onClick={createAndAdd}>
-              {needsApproval ? "Propose" : "Add"}
-            </button>
+            {joinPlan.kind === "choose" && (
+              <button type="button" disabled={busy} className="btn btn-primary h-11 flex-1" onClick={addSelected}>
+                {needsApproval ? "Propose" : "Add"}
+              </button>
+            )}
           </div>
         </div>
       )}

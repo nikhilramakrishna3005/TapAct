@@ -6,14 +6,14 @@ import { compactDuelStatus } from "@/lib/duels/arena";
 import {
   activeNameMatches,
   claimLinkAttempt,
-  decideDuelActivityLink,
-  trackerCommitPersisted,
+  planJoinLink,
+  trackerUsedByOtherChallenge,
 } from "@/lib/duels/connect";
 import { describeRuleChanges } from "@/lib/duels/rules";
 import { addCalendarDays } from "@/lib/duels/score";
 import type { ShowcaseBattle } from "@/lib/duels/showcase";
 import { consistencyStreak, dayPhase, type DayPhase } from "@/lib/duels/streak";
-import { addActivity, createActivityId, toggleActivity, type TrackerState } from "@/lib/tracker";
+import { toggleActivity, type TrackerState } from "@/lib/tracker";
 import type { CommitResult, TrackerUpdate } from "@/lib/trackerStore";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { archetypeOf } from "@/lib/duels/character";
@@ -91,6 +91,7 @@ export function DuelArena({
       }))
     : board.activities;
   const connectTargets = connectId === "all" ? unmapped : board.activities.filter((activity) => activity.id === connectId);
+  const joinPlan = planJoinLink(tracker.activities);
 
   const finishLink = () => {
     linking.current = false;
@@ -125,37 +126,13 @@ export function DuelArena({
 
   const linkExisting = (challengeActivityId: string, trackerActivityId: string) => {
     if (!claimLinkAttempt(linking)) return;
+    if (trackerUsedByOtherChallenge(board.you.mappings, challengeActivityId, trackerActivityId)) {
+      finishLink();
+      setConnectNote("That Today activity is already linked in this duel. Its tracking still counts once.");
+      return;
+    }
     setConnectNote(null);
     mapTracker(challengeActivityId, trackerActivityId);
-  };
-
-  const addMine = (challengeActivityId: string, name: string, targetMinutes: number) => {
-    if (!claimLinkAttempt(linking)) return;
-    setConnectNote(null);
-    const decision = decideDuelActivityLink({
-      duelName: name,
-      mappedTrackerId: mapped.get(challengeActivityId) ?? null,
-      activities: tracker.activities,
-    });
-    if (decision.action === "link") {
-      finishLink();
-      linkExisting(challengeActivityId, decision.trackerActivityId);
-      return;
-    }
-    if (decision.action !== "create") {
-      finishLink();
-      return;
-    }
-    const id = createActivityId(name);
-    const saved = commit((base) =>
-      addActivity(base, { id, name, iconKey: "briefcase", color: "#8E7BFF", goalMinutes: targetMinutes, cue: "Duel activity" }),
-    );
-    if (!trackerCommitPersisted(saved)) {
-      finishLink();
-      setConnectNote("Couldn't save the new activity on this device, so it wasn't connected.");
-      return;
-    }
-    mapTracker(challengeActivityId, id);
   };
 
   const recapZones = [board.you.timeZone, board.friend?.timeZone].filter((zone): zone is string => Boolean(zone));
@@ -487,6 +464,9 @@ export function DuelArena({
 
       {connectTargets.length > 0 && connectId && (
         <Sheet label="Connect activity" onClose={() => setConnectId(null)}>
+          {joinPlan.kind === "empty" ? (
+            <p className="mt-4 text-sm leading-relaxed text-text-2">{joinPlan.message}</p>
+          ) : (
           <div className="mt-4 space-y-4">
             {connectTargets.map((activity) => {
               const connected = activities.find((item) => item.id === mapped.get(activity.id)) ?? null;
@@ -526,7 +506,7 @@ export function DuelArena({
                 )}
                 {others.length > 0 && (
                   <>
-                    <p className="mt-3 text-xs text-text-3">Or choose a different Today activity.</p>
+                    <p className="mt-3 text-xs text-text-3">{choices.length === 0 && !connected ? "Choose a Today activity." : "Or choose a different Today activity."}</p>
                     <ul>
                       {others.map((item) => (
                         <li key={item.id}>
@@ -553,21 +533,12 @@ export function DuelArena({
                     Use existing activity
                   </button>
                 )}
-                {!connected && matches.length === 0 && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    className="btn btn-primary mt-2 h-11 w-full"
-                    onClick={() => addMine(activity.id, activity.name, activity.targetMinutes)}
-                  >
-                    Create new activity
-                  </button>
-                )}
               </div>
               );
             })}
             {connectNote && <p role="status" className="text-xs text-text-2">{connectNote}</p>}
           </div>
+          )}
         </Sheet>
       )}
       {recapOpen && <DailyRecap board={board} onClose={() => setRecapOpen(false)} />}

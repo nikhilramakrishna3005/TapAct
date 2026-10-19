@@ -43,14 +43,14 @@ describe("duel activity matching", () => {
     expect(decision).toEqual({ action: "choose", matches: activities });
   });
 
-  it("creates only when no active activity matches", () => {
+  it("does not create a dashboard activity when nothing on Today matches", () => {
     expect(
       decideDuelActivityLink({
         duelName: "Reading",
         mappedTrackerId: null,
         activities: [coding()],
       }),
-    ).toEqual({ action: "create" });
+    ).toEqual({ action: "needs-activity" });
   });
 
   it("ignores an archived activity with the same name", () => {
@@ -58,14 +58,14 @@ describe("duel activity matching", () => {
     expect(activeNameMatches([archived], "Coding")).toEqual([]);
     expect(
       decideDuelActivityLink({ duelName: "Coding", mappedTrackerId: null, activities: [archived] }),
-    ).toEqual({ action: "create" });
+    ).toEqual({ action: "needs-activity" });
     expect(
       decideDuelActivityLink({
         duelName: "Coding",
         mappedTrackerId: archived.id,
         activities: [archived],
       }),
-    ).toEqual({ action: "create" });
+    ).toEqual({ action: "needs-activity" });
   });
 
   it("keeps an existing valid mapping and does not remap from the name", () => {
@@ -123,18 +123,24 @@ describe("duel activity matching", () => {
     expect(trackerCommitPersisted(null)).toBe(false);
   });
 
-  it("keeps personal goals independent of the duel target in the connect sheet", () => {
+  it("links an existing Today activity and does not create one from a duel", () => {
     const arena = readFileSync(resolve(process.cwd(), "app/components/duels/DuelArena.tsx"), "utf8");
-    const addMine = arena.slice(arena.indexOf("const addMine"), arena.indexOf("const recapZones"));
-    expect(addMine).toContain("claimLinkAttempt(linking)");
-    expect(addMine).toContain("if (!trackerCommitPersisted(saved))");
-    expect(addMine.indexOf("trackerCommitPersisted")).toBeLessThan(addMine.indexOf("mapTracker"));
-    expect(addMine).not.toContain("updateActivity");
+    const create = readFileSync(resolve(process.cwd(), "app/components/duels/CreateDuelSheet.tsx"), "utf8");
+    const manage = readFileSync(resolve(process.cwd(), "app/components/duels/ManageActivitiesSheet.tsx"), "utf8");
+    for (const source of [arena, create, manage]) {
+      expect(source).not.toContain("addActivity");
+      expect(source).not.toContain("createActivityId");
+      expect(source).not.toContain("Create new activity");
+      expect(source).not.toContain("Add to Today and this duel");
+    }
+    expect(arena).toContain("claimLinkAttempt(linking)");
     expect(arena).toContain("Use existing activity");
-    expect(arena).toContain("Create new activity");
     expect(arena).toContain("Connected to");
     expect(arena).toContain("linkExisting");
+    expect(arena).toContain("planJoinLink");
     expect(arena).not.toContain("Add to my activities");
     expect(arena).not.toContain("updateActivity");
+    expect(create).toContain("activeDashboardActivities");
+    expect(create).toContain("toggleDuelDashboardSelection");
   });
 });

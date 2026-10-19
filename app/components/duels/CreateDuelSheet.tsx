@@ -4,8 +4,12 @@ import { type FormEvent, useState } from "react";
 import { deviceTimeZone, deviceTodayKey, duelError, shareInvite } from "@/lib/duels/api";
 import { suggestDuelTitle, validateDuelDraft, type DuelActivityDraft } from "@/lib/duels/invite";
 import { DUEL_DURATIONS, type DuelDuration } from "@/lib/duels/score";
-import { activeNameMatches, trackerCommitPersisted } from "@/lib/duels/connect";
-import { addActivity, createActivityId, type Activity, type TrackerState } from "@/lib/tracker";
+import {
+  CREATE_ACTIVITY_ON_TODAY_MESSAGE,
+  activeDashboardActivities,
+  toggleDuelDashboardSelection,
+} from "@/lib/duels/connect";
+import { type Activity, type TrackerState } from "@/lib/tracker";
 import type { CommitResult, TrackerUpdate } from "@/lib/trackerStore";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { duelsApi } from "@/lib/duels/api";
@@ -15,12 +19,12 @@ type Step = "setup" | "confirm" | "link";
 
 export function CreateDuelSheet({
   tracker,
-  commit,
   onClose,
   onCreated,
 }: {
   tracker: TrackerState;
-  commit: (update: TrackerUpdate) => CommitResult | void;
+  /** Kept so callers can still pass the tracker writer. Creating a duel does not add activities. */
+  commit?: (update: TrackerUpdate) => CommitResult | void;
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -30,67 +34,25 @@ export function CreateDuelSheet({
   const [startsOn, setStartsOn] = useState(today);
   const [title, setTitle] = useState("");
   const [activities, setActivities] = useState<DuelActivityDraft[]>([]);
-  const [freshName, setFreshName] = useState("");
-  const [freshMinutes, setFreshMinutes] = useState(20);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
 
   const resolvedTitle = title.trim() || suggestDuelTitle(durationDays, activities[0]?.name ?? "");
-  const activeActivities = tracker.activities.filter((activity) => activity.archivedAtMs === null);
+  const activeActivities = activeDashboardActivities(tracker.activities);
 
   const updateActivity = (index: number, patch: Partial<DuelActivityDraft>) => {
     setActivities((current) => current.map((activity, i) => (i === index ? { ...activity, ...patch } : activity)));
   };
 
   const toggleExisting = (activity: Activity) => {
-    const already = activities.some((item) => item.trackerActivityId === activity.id);
-    if (!already && activities.length >= 3) {
-      setError("A duel can include up to 3 activities.");
+    const next = toggleDuelDashboardSelection(activities, activity);
+    if (!next.ok) {
+      setError(next.message);
       return;
     }
-    setActivities((current) => {
-      if (current.some((item) => item.trackerActivityId === activity.id)) {
-        return current.filter((item) => item.trackerActivityId !== activity.id);
-      }
-      return [...current, { name: activity.name, targetMinutes: activity.goalMinutes ?? 20, trackerActivityId: activity.id }];
-    });
-    setError(null);
-  };
-
-  const createAndSelect = () => {
-    const name = freshName.trim();
-    if (name.length < 2) {
-      setError("Name the activity before adding it to Today.");
-      return;
-    }
-    if (activities.length >= 3) {
-      setError("A duel can include up to 3 activities.");
-      return;
-    }
-    const matches = activeNameMatches(activeActivities, name);
-    if (matches.length > 1) {
-      setError("More than one Today activity uses that name. Select it above.");
-      return;
-    }
-    if (matches.length === 1) {
-      const match = matches[0];
-      if (!activities.some((item) => item.trackerActivityId === match.id)) {
-        setActivities((current) => [...current, { name: match.name, targetMinutes: freshMinutes, trackerActivityId: match.id }]);
-      }
-      setFreshName("");
-      setError(null);
-      return;
-    }
-    const id = createActivityId(name);
-    const saved = commit((base) => addActivity(base, { id, name, iconKey: "briefcase", color: "#8E7BFF", goalMinutes: freshMinutes, cue: "Duel activity" }));
-    if (!trackerCommitPersisted(saved)) {
-      setError("Couldn't save the new activity on this device.");
-      return;
-    }
-    setActivities((current) => [...current, { name, targetMinutes: freshMinutes, trackerActivityId: id }]);
-    setFreshName("");
+    setActivities(next.activities);
     setError(null);
   };
 
@@ -161,24 +123,22 @@ export function CreateDuelSheet({
           </label>
           <div>
             <p className="eyebrow mb-2">From Today</p>
-            {activeActivities.length === 0 && <p className="text-xs text-text-3">No activities on Today yet. Add one below.</p>}
-            <ul className="space-y-1">
-              {activeActivities.map((item) => {
-                const selected = activities.some((activity) => activity.trackerActivityId === item.id);
-                return (
-                  <li key={item.id}>
-                    <button type="button" aria-pressed={selected} onClick={() => toggleExisting(item)} className={`min-h-11 w-full rounded-xl border px-3 text-left text-sm ${selected ? "border-volt/50 text-text-1" : "border-line text-text-2"}`}>
-                      {selected ? "Selected" : "Select"} · {item.name}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="mt-3 flex gap-2">
-              <input value={freshName} onChange={(event) => setFreshName(event.target.value)} maxLength={36} placeholder="New activity" aria-label="New activity name" className="field" />
-              <input type="number" min={5} max={240} value={freshMinutes} onChange={(event) => setFreshMinutes(Number(event.target.value))} aria-label="New activity daily minutes" className="field numeric w-24" />
-            </div>
-            <button type="button" onClick={createAndSelect} className="mt-2 text-sm font-medium text-volt-hi">Add to Today and this duel</button>
+            {activeActivities.length === 0 ? (
+              <p className="text-sm leading-relaxed text-text-2">{CREATE_ACTIVITY_ON_TODAY_MESSAGE}</p>
+            ) : (
+              <ul className="space-y-1">
+                {activeActivities.map((item) => {
+                  const selected = activities.some((activity) => activity.trackerActivityId === item.id);
+                  return (
+                    <li key={item.id}>
+                      <button type="button" aria-pressed={selected} onClick={() => toggleExisting(item)} className={`min-h-11 w-full rounded-xl border px-3 text-left text-sm ${selected ? "border-volt/50 text-text-1" : "border-line text-text-2"}`}>
+                        {selected ? "Selected" : "Select"} · {item.name}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
           <div className="space-y-2">
             <p className="eyebrow">In this duel</p>
